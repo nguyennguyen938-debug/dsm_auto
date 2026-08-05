@@ -84,6 +84,14 @@ File tách vào thẳng **`_INBOX`**, chưa vào `PO - <po>`, vì ở bước n�
 có ngày pickup, mà `makeFolder` cần ngày pickup mới tạo được folder. Dedup vì vậy chấp nhận
 `<PO>_PackingSlip.pdf` ở **`_INBOX` hoặc `PO - <po>`** — cả hai đều là vị trí chính xác.
 
+**File gộp `<fid>.pdf` không bị xoá trong `run.mjs`** — nó là bản gốc duy nhất để đối chiếu nếu
+một file tách bị nghi gán nhầm PO, mà lấy lại từ DSM đồng nghĩa submit reprint lần nữa.
+`donDepManifest` xoá nó sau, cùng lúc và cùng điều kiện với manifest (mọi PO trong lô đã có file
+tách). Sau đó bản gốc **chỉ còn trên đĩa VM** ở `../11_TaiVe/dsm_raw/`, không được sao lưu.
+
+⚠️ Xoá manifest sớm bằng tay sẽ khiến `<fid>.pdf` **mồ côi** — không còn manifest nào trỏ tới nó
+nên `donDepManifest` sẽ không bao giờ dọn. Lúc đó phải xoá tay.
+
 ### ⚠️ Một lô có thể sinh NHIỀU file chờ (sửa 05/08/2026)
 
 Tài liệu cũ nói file reprint là *một* file dồn tích. **Sai.** Chạy thật 05/08: submit 2 PO cách

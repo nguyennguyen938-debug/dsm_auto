@@ -483,7 +483,7 @@ function _coFilePackingSlip_(po) {
 }
 
 /* ============================================================================
- *  G) donDepManifest — XOÁ MANIFEST ĐÃ HẾT VIỆC
+ *  G) donDepManifest — XOÁ MANIFEST **VÀ FILE GỘP** ĐÃ HẾT VIỆC
  * ----------------------------------------------------------------------------
  *  Manifest chỉ là dấu TẠM, lấp khoảng trống từ lúc tải file gộp tới lúc tách
  *  xong thành <PO>_PackingSlip.pdf. Tách xong rồi thì nó là rác.
@@ -497,6 +497,12 @@ function _coFilePackingSlip_(po) {
  *
  *  Chỉ xoá khi MỌI PO trong manifest đều đã có file. Thiếu một PO -> giữ nguyên.
  *
+ *  Đủ điều kiện thì xoá CẢ HAI: `<fid>_manifest.json` và `<fid>.pdf` (file gộp).
+ *  File gộp chỉ là nguyên liệu để tách; tách xong thì không ai dùng tới nữa.
+ *  ⚠️ Sau bước này bản gốc **chỉ còn trên đĩa VM** (`11_TaiVe/dsm_raw/`) — không sao lưu.
+ *     Lấy lại từ DSM đồng nghĩa submit reprint lần nữa, mà việc đó không hoàn tác được.
+ *     Vì vậy KHÔNG xoá file gộp ngay trong run.mjs: phải đợi mọi file tách lên Drive đã.
+ *
  *    GET  <webapp>/exec?action=donDepManifest            -> CHỈ ĐẾM, không xoá
  *    GET  <webapp>/exec?action=donDepManifest&thatSu=1   -> xoá thật
  *
@@ -505,21 +511,26 @@ function _coFilePackingSlip_(po) {
 function _donDepManifest(body) {
   var thatSu = !!(body && (body.thatSu === true || body.thatSu === '1' || body.thatSu === 1));
   var xoa = [], giu = [], loi = [];
+  var inbox = DriveApp.getFolderById(INBOX_FOLDER_ID);
 
-  var it = DriveApp.getFolderById(INBOX_FOLDER_ID).getFiles();
+  var it = inbox.getFiles();
   while (it.hasNext()) {
     var f = it.next();
     if (f.isTrashed()) continue;
     var ten = f.getName();
     if (ten.indexOf(MANIFEST_SUFFIX) !== ten.length - MANIFEST_SUFFIX.length) continue;
 
-    var ds;
+    var ds, fid;
     try {
       var m = JSON.parse(f.getBlob().getDataAsString());
       ds = (m && m.pos) || [];
+      // fid trong nội dung là chuẩn; thiếu thì suy từ tên file
+      fid = (m && m.fid) ? String(m.fid) : ten.slice(0, ten.length - MANIFEST_SUFFIX.length);
     } catch (e) {
       // Manifest hỏng: _poDaLaySlip_ cũng bỏ qua nó, tức nó KHÔNG bảo vệ PO nào.
       // Nhưng vẫn không tự xoá — để người xem, vì nó là dấu hiệu run.mjs ghi lỗi.
+      // Cũng KHÔNG đụng tới <fid>.pdf: không đọc được danh sách PO thì không có cơ sở nào
+      // để nói lô đó đã xong.
       loi.push({ ten: ten, ly_do: 'JSON hong' });
       continue;
     }
@@ -531,12 +542,23 @@ function _donDepManifest(body) {
       if (!_coFilePackingSlip_(po)) chuaCo.push(po);
     }
 
-    if (chuaCo.length) {
-      giu.push({ ten: ten, con_thieu: chuaCo });
-    } else {
-      xoa.push({ ten: ten, so_po: ds.length });
-      if (thatSu) f.setTrashed(true);
+    if (chuaCo.length) { giu.push({ ten: ten, con_thieu: chuaCo }); continue; }
+
+    // Đủ điều kiện: xoá CẢ manifest LẪN file gộp <fid>.pdf.
+    // File gộp chỉ là nguyên liệu để tách; tách xong thì không ai dùng nữa.
+    // Tìm trong ĐÚNG folder _INBOX (không phải getFilesByName toàn Drive) để khỏi
+    // đụng nhầm file trùng tên ở nơi khác.
+    var tenGop = fid + '.pdf', daXoaGop = false;
+    var g = inbox.getFilesByName(tenGop);
+    while (g.hasNext()) {
+      var fg = g.next();
+      if (fg.isTrashed()) continue;
+      if (thatSu) fg.setTrashed(true);
+      daXoaGop = true;
     }
+
+    xoa.push({ ten: ten, so_po: ds.length, file_gop: daXoaGop ? tenGop : '(khong thay)' });
+    if (thatSu) f.setTrashed(true);
   }
 
   return _json({
