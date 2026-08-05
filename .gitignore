@@ -1,0 +1,16 @@
+# ⛔ COOKIE PHIÊN — coi như mật khẩu, KHÔNG BAO GIỜ commit
+**/storageState.json
+**/.chrome-profile-dsm/
+
+# File tải về / kết quả chạy — không đưa lên git
+DSM_TuDongHoa/11_TaiVe/**
+!DSM_TuDongHoa/11_TaiVe/README.md
+!DSM_TuDongHoa/11_TaiVe/.gitkeep
+
+# Node
+**/node_modules/
+npm-debug.log*
+
+# Rác hệ điều hành
+.DS_Store
+Thumbs.db

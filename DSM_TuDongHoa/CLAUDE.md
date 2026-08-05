@@ -175,6 +175,7 @@ khác, dễ bỏ sót — mà Submit không hoàn tác được.
 | `07_Plan_AutoPackingSlip.md` | Thiết kế + toàn bộ khảo sát endpoint DSM |
 | `08_Tool_TaiPackingSlip.js` | Tool chạy **trong tab** Chrome (3 hàm) |
 | `10_VM_Tool/` | **Bản Node + Playwright chạy tự động trên VM** |
+| `11_TaiVe/` | **Chỗ tải file về trên VM** (thay `C:\Users\Lenovo\Downloads`). Đã `.gitignore` |
 | `06_File_Cu_KHONG_DUNG/` | ⚠️ **ĐỪNG dán lên Apps Script** — trùng tên hàm sẽ đè code mới |
 
 ---
@@ -218,6 +219,18 @@ Bộ tài liệu này viết trong Cowork, nơi có **Claude in Chrome** điều
 | Tải file về đĩa | Blob + `<a download>` trong tab | Playwright/`fetch` ghi thẳng ra file |
 | Đọc/ghi Drive & Sheet | Qua web app + connector Drive | Qua web app (URL công khai, không cần auth Google) |
 | Điền form AACT/CTII | Claude in Chrome bấm tay | Playwright — **chưa viết**, và đây là phần giòn nhất |
+
+### Máy hiện tại — VM Linux (chốt 05/08/2026)
+
+Repo clone tại `/home/Lenovo/dsm_auto`, thư mục làm việc `/home/Lenovo/dsm_auto/DSM_TuDongHoa`.
+
+| Việc | Thực tế trên VM |
+|---|---|
+| Chỗ tải file | `11_TaiVe/` — xem `11_TaiVe/README.md`. **Không có `~/Downloads`** |
+| Trình duyệt | Chỉ **headless** (`DISPLAY` rỗng). Chromium có sẵn; **Google Chrome KHÔNG có** → mọi lệnh Playwright phải `--browser chromium` |
+| MCP dùng cho DSM | **`playwright-dsm`** (khai trong `~/.claude.json`) |
+| ⚠️ MCP `playwright` | Trỏ `/opt/wayfair/downloads` — **dự án khác đang chạy thật, đừng đụng, đừng dùng cho DSM** |
+| `login.mjs` | Cần màn hình → **không chạy được ở đây**. Đăng nhập ở máy có màn hình rồi copy `storageState.json` lên VM |
 
 Hai mẹo kỹ thuật chỉ đúng trong Cowork, **bỏ qua khi ở Claude Code**:
 `javascript_tool` trả `{}` với hàm async (phải ghi vào `window.__x` rồi đọc lệnh sau), và kết quả

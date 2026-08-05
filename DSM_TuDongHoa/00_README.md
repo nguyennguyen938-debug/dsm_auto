@@ -147,7 +147,7 @@ Mail báo kho bỏ từ 01/08; trigger `processOrders` **đã xoá 04/08 — kh�
 |---|---|
 | Drive gốc | `1hsWarcdjtK63CD8As9CtXqJTcUPg8oAw` — "THD Orders" |
 | Drive `_INBOX` | `18rFktqm_K_a9-RPW5S0o2fTkmmHITGKO` — lưu **file PDF gộp thô** tải từ DSM, nằm trực tiếp trong "THD Orders" |
-| Folder mount | `C:\Users\Lenovo\Downloads` — Claude đọc file DSM vừa tải **từ đĩa** (không tải qua Drive, xem `07_Plan_AutoPackingSlip.md`) |
+| Folder tải file | `DSM_TuDongHoa/11_TaiVe/` (VM Linux, chốt 05/08/2026) — xem `11_TaiVe/README.md`. Thay cho `C:\Users\Lenovo\Downloads` của máy Windows cũ |
 | Web app | `https://script.google.com/macros/s/AKfycbzzJCEgWBcO76OcbhJIdiHGlJEgbWxq7FFEGbIwwpQe2gmtOalVOXziJXFyuI1Ckrtn-Q/exec` |
 | Sheet | `1Fzwr2GDHOHxMgqPNf-Ksf6qJ5IIl3mNzrOQrHqH57fo`, tab **"Order List"** (header hàng 6, data hàng 7) |
 | Trần đơn/ngày | `MAX_PER_DAY = 20` |
