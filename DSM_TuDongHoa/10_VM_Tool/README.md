@@ -36,6 +36,31 @@ hoặc dựng màn hình ảo ngay trên VM — **cách đang dùng**, xem `../1
 
 > `storageState.json` chứa cookie phiên — coi như mật khẩu. Đừng commit, đừng chia sẻ.
 
+### Giữ session (thêm 05/08/2026) — CHƯA BIẾT CÓ TÁC DỤNG KHÔNG
+
+`giu-session.sh` chạy mỗi 5 phút, mỗi lần một `GET gotoHome.do` duy nhất. Không submit, không tải,
+không đụng sheet hay Drive. Cookie được gia hạn (nếu có) thì ghi đè lại `storageState.json` kiểu
+ghi-tạm-rồi-đổi-tên. Dùng **chung khoá** với `chay-dinh-ky.sh` nên không bao giờ chạy chồng.
+
+Hai kiểu hết hạn cho kết quả ngược nhau, và ta **chưa phân biệt được**:
+
+| Kiểu | Kết quả |
+|---|---|
+| Theo thời gian **nằm im** (sliding) | Giữ được, có thể vô hạn → giữ nguyên cron 5 phút |
+| **Tuyệt đối** từ lúc đăng nhập | Vô ích, chỉ tốn request → **bỏ cron này đi** |
+
+Vì vậy log ghi **tuổi session** mỗi lần kiểm. Đọc kết luận sau một ngày:
+
+```bash
+grep CHET ../11_TaiVe/logs/giu-session.log | tail
+```
+
+Tuổi lúc chết **vượt xa 5 tiếng** → sliding, đang có tác dụng. Luôn chết quanh **cùng một mốc**
+bất kể tương tác → tuyệt đối, gỡ cron.
+
+Mốc đăng nhập lấy từ `storageState.json.info.json` do `login.mjs` ghi — **không** dùng mtime của
+`storageState.json`, vì chính `giu-session.mjs` ghi đè file đó mỗi khi cookie đổi.
+
 ⚠️ **Session DSM chỉ sống vài tiếng.** Đo 05/08: đăng nhập 10:53, tới 15:46 đã chết sau khi
 nằm im. Đăng nhập lại **bắt buộc có người** (`sso.auth.commercehub.com` là OAuth/Frontegg,
 không có API key). Nên cron sẽ ghi `ma 3` phần lớn thời gian — **đó là bình thường, không phải bug.**
@@ -147,6 +172,7 @@ thiếu dịch mã thoát):
 
 ```cron
 */30 7-19 * * 1-5 /home/Lenovo/dsm_auto/DSM_TuDongHoa/10_VM_Tool/chay-dinh-ky.sh
+*/5  6-20 * * 1-5 /home/Lenovo/dsm_auto/DSM_TuDongHoa/10_VM_Tool/giu-session.sh
 ```
 
 Log: `../11_TaiVe/logs/dsm-tool.log`. Chạy thử không submit: `DSM_DRY=1 ./chay-dinh-ky.sh`.

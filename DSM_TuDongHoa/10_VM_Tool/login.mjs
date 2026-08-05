@@ -51,6 +51,12 @@ if (!ok) {
 
 await ctx.storageState({ path: STATE });
 await fs.chmod(STATE, 0o600).catch(() => {});
+
+// Mốc đăng nhập, để giu-session.mjs tính được TUỔI session.
+// Không dùng mtime của STATE: giu-session.mjs ghi đè file đó mỗi khi cookie thay đổi.
+await fs.writeFile(STATE + '.info.json',
+  JSON.stringify({ dangNhapLuc: new Date().toISOString() }, null, 1), { mode: 0o600 }).catch(() => {});
+
 console.log(`\n✅ Da luu ${STATE} (chmod 600).`);
 console.log('   Kiem thu:  node run.mjs --dry\n');
 
