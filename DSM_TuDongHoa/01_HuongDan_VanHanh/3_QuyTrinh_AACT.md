@@ -101,7 +101,11 @@ Triệu chứng: viewer PDF hiện thanh công cụ + "Page 1 of 1" nhưng **spi
    - `https://www.aaacooper.com/workspace/bol/<BOL_ID>/pdf`
    - `https://www.aaacooper.com/workspace/shipping-label?sourceBolNumber=<BOL_ID>`
 
-⛔ **TUYỆT ĐỐI KHÔNG tạo lại BOL.** BOL và PRO đã tồn tại thật; tạo lại = BOL rác + **lệnh pickup trùng**.
+⛔ **TUYỆT ĐỐI KHÔNG tạo lại BOL.** BOL và PRO đã tồn tại thật; tạo lại = **BOL rác + PRO rác**.
+
+> 🔧 **Sửa 05/08/2026:** dòng này trước ghi "lệnh pickup trùng" — **sai**. AACT **chỉ tạo BOL,
+> KHÔNG đặt lịch pickup** (người dùng xác nhận; khớp với `6_QuyTrinh_CTII.md` mục xung đột trần).
+> Chỉ **CTII** mới tạo lệnh pickup thật. Cái sai này từng khiến tự chặn việc mình được phép làm.
 
 ✅ **Trong lúc chờ, vẫn làm được:** `makeFolder` → upload `<PO>_PackingSlip.pdf` → `fillRow` **kèm `pro`**. Mail kho sẽ không tự gửi vì thiếu file (AACT cần đủ 3) — an toàn. Khi có đủ 2 file còn lại, mail tự chạy.
 
@@ -117,8 +121,13 @@ Triệu chứng: viewer PDF hiện thanh công cụ + "Page 1 of 1" nhưng **spi
    - Verify bằng Drive `search_files` (đủ 3 file trong folder `<PO>`).
 
 **5.3 — Điền Sheet qua WEB APP (`fillRow`) — sheet "Order List":** từ tab `example.com`, POST:
+   > 🔴 **Sửa 05/08/2026 — ví dụ dưới đây trước có `headers:{'Content-Type':'text/plain'}`. BỎ ĐI.**
+   > Đặt header đó làm lỗi `{"ok":true,"msg":"Receiver alive"}` (doPost KHÔNG chạy, sheet không được
+   > ghi gì nhưng `ok===true`) xảy ra **liên tục**. File này viết trước khi phát hiện điều đó ngày 03/08.
+   > Xem `CLAUDE.md` mục 4. Và **đừng kiểm `o.ok`** — `fillRow` kiểm `o.row`.
+
    ```js
-   fetch(WEBAPP_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+   fetch(WEBAPP_URL, { method:'POST',
      body: JSON.stringify({ action:'fillRow',
        po:'<PO>', carrier:'AACT', customerOrder:'<Customer Order #>', shipTo:'<Tên>',
        sku:'<Model Number nguyên, vd 832250-B>', productName:'<Item Description>', qty:'<Qty Shipped>',

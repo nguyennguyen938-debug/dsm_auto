@@ -9,8 +9,14 @@ Claude Code đọc file này tự động. Đây là bản tóm tắt **đã ki�
 
 1. **Mọi điểm chưa chắc chắn phải HỎI người dùng.** Không suy diễn, không đoán, không bịa.
    Nếu tài liệu không nói, hỏi. Nếu tool trả kết quả lạ, báo nguyên văn.
-2. **Không bấm Submit trên web carrier khi đang test** (`centraltransport.com`, `aaacooper.com`)
-   — tạo BOL và lệnh pickup thật, không huỷ được.
+2. **Submit trên web carrier — hai site KHÁC NHAU** (làm rõ 05/08/2026, người dùng xác nhận):
+   - **`centraltransport.com` → TẠO LỆNH PICKUP THẬT, không huỷ được.** Không submit khi test.
+     Form BOL **mở công khai, KHÔNG cần đăng nhập** — nghĩa là không có rào cản nào ngăn một
+     lần chạy lỗi gọi xe thật đến kho. Đây là thao tác nguy hiểm nhất trong toàn bộ dự án.
+   - **`aaacooper.com` → chỉ tạo BOL, KHÔNG tạo lệnh pickup.** Hậu quả nhẹ hơn nhiều.
+     Vẫn cần đăng nhập (form user/password, không SSO, không thấy MFA).
+   Bản cũ gộp hai site làm một và cấm cả hai — sai ở phía AACT, và cái sai đó tự chặn việc mình
+   được phép làm.
 3. **Submit reprint trên DSM KHÔNG HOÀN TÁC ĐƯỢC.** Kiểm trùng trước; lỗi thì **không retry**.
 4. **Không nhập mật khẩu, không lưu mật khẩu.** Đăng nhập do người dùng tự làm.
 5. **PO luôn 8 chữ số, luôn ghi dạng TEXT** vào sheet (`setNumberFormat('@')` TRƯỚC `setValue`).

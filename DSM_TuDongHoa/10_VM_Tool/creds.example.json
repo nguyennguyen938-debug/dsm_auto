@@ -1,0 +1,12 @@
+{
+  "_doc": "MAU. Chep thanh ../11_TaiVe/creds.json roi dien that. TUYET DOI khong dat file that o day — 10_VM_Tool/ nam trong git, con 11_TaiVe/ da bi .gitignore chan.",
+  "_tao": "cat > /home/Lenovo/dsm_auto/DSM_TuDongHoa/11_TaiVe/creds.json  (roi chmod 600)",
+  "_ctii": "CTII KHONG can muc nay — form BOL cua ho mo cong khai, khong dang nhap.",
+
+  "aact": {
+    "user": "...",
+    "pass": "...",
+    "_url": "https://www.aaacooper.com/pwb/Account/LogOn.aspx",
+    "_o": "AAACooperMasterPage$bodyContent$txtPassword"
+  }
+}
