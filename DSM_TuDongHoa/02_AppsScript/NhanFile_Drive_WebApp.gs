@@ -70,6 +70,7 @@ function doPost(e) {
     if (body.action === 'fillRow')    return _fillRow(body);
     if (body.action === 'lookup')     return _lookup(body);
     if (body.action === 'needSlip')   return _needSlip(body);
+    if (body.action === 'donDepManifest') return _donDepManifest(body);
 
     // ---- chế độ nhận file ----
     if (!body.folderId || !body.filename) throw new Error('Thiếu folderId/filename');
@@ -448,13 +449,20 @@ function _poDaLaySlip_() {
 }
 
 /**
- * Có '<PO>_PackingSlip.pdf' nằm trong cây "THD Orders" không?
+ * Có '<PO>_PackingSlip.pdf' ở một trong HAI vị trí hợp lệ không?
  *
- * Hai điểm khác bản cũ:
- *  1. Bỏ file trong Thùng rác. getFilesByName TRẢ CẢ FILE ĐÃ XOÁ -> PO từng xoá file sẽ bị
- *     coi là "đã có" và BỎ SÓT ĐƠN.
- *  2. Chỉ tính file nằm trong folder 'PO - <po>'. getFilesByName quét TOÀN BỘ Drive của info@,
- *     nên một file trùng tên ở bất cứ đâu (bản nháp, thư mục cá nhân) cũng làm bỏ sót đơn.
+ *   a) `_INBOX`            — run.mjs tự tách file gộp rồi đẩy vào đây (bước 7)
+ *   b) folder `PO - <po>`  — sau khi đã dọn vào cây THD Orders ở bước ④
+ *
+ * Cả hai đều là vị trí CHÍNH XÁC, không phải "bất kỳ đâu trong Drive".
+ * `getFilesByName` quét toàn bộ Drive của info@, nên nếu nhận bừa thì một file trùng tên
+ * nằm lạc (bản nháp, thư mục cá nhân) sẽ làm dedup tưởng đã có slip -> BỎ SÓT ĐƠN THẬT.
+ *
+ * Cũng bỏ file trong Thùng rác: getFilesByName TRẢ CẢ FILE ĐÃ XOÁ, nhận vào thì PO từng
+ * xoá file sẽ bị coi là "đã có" -> cũng bỏ sót đơn.
+ *
+ * ⚠️ Hàm này là điều kiện dùng CHUNG cho dedup (_needSlip) và cho việc xoá manifest
+ *    (_donDepManifest). Sửa nó là sửa cả hai — đó là chủ ý, đừng tách ra làm hai bản.
  */
 function _coFilePackingSlip_(po) {
   var it = DriveApp.getFilesByName(po + '_PackingSlip.pdf');
@@ -463,13 +471,79 @@ function _coFilePackingSlip_(po) {
     if (f.isTrashed()) continue;
     var ps = f.getParents();
     while (ps.hasNext()) {
+      var cha = ps.next();
+      if (cha.getId() === INBOX_FOLDER_ID) return true;             // (a)
       // .trim(): thực tế có folder "PO - 02562579 " dính dấu cách thừa.
       // _poKey: folder cũ có thể mất số 0 đầu ("PO - 2562579") — vẫn phải khớp.
-      var m = ps.next().getName().trim().match(/^PO\s*-\s*(\d+)$/);
+      var m = cha.getName().trim().match(/^PO\s*-\s*(\d+)$/);        // (b)
       if (m && _poKey(m[1]) === po) return true;
     }
   }
   return false;
+}
+
+/* ============================================================================
+ *  G) donDepManifest — XOÁ MANIFEST ĐÃ HẾT VIỆC
+ * ----------------------------------------------------------------------------
+ *  Manifest chỉ là dấu TẠM, lấp khoảng trống từ lúc tải file gộp tới lúc tách
+ *  xong thành <PO>_PackingSlip.pdf. Tách xong rồi thì nó là rác.
+ *
+ *  🔴 ĐIỀU KIỆN XOÁ PHẢI TRÙNG KHÍT VỚI ĐIỀU KIỆN DEDUP — nếu không sẽ hở:
+ *     xoá manifest theo luật lỏng (có file ở bất kỳ đâu trong Drive) trong khi
+ *     dedup đòi luật chặt (file phải nằm trong folder 'PO - <po>') thì PO rơi
+ *     khỏi cả hai nguồn -> lần chạy sau SUBMIT TRÙNG.
+ *     Vì vậy ở đây gọi thẳng _coFilePackingSlip_() — đúng hàm dedup đang dùng.
+ *     Đừng viết lại logic tương đương, hai bên sẽ lệch nhau khi có người sửa.
+ *
+ *  Chỉ xoá khi MỌI PO trong manifest đều đã có file. Thiếu một PO -> giữ nguyên.
+ *
+ *    GET  <webapp>/exec?action=donDepManifest            -> CHỈ ĐẾM, không xoá
+ *    GET  <webapp>/exec?action=donDepManifest&thatSu=1   -> xoá thật
+ *
+ *  Xoá = setTrashed(true) (vào Thùng rác, khôi phục được 30 ngày), KHÔNG xoá vĩnh viễn.
+ * ==========================================================================*/
+function _donDepManifest(body) {
+  var thatSu = !!(body && (body.thatSu === true || body.thatSu === '1' || body.thatSu === 1));
+  var xoa = [], giu = [], loi = [];
+
+  var it = DriveApp.getFolderById(INBOX_FOLDER_ID).getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.isTrashed()) continue;
+    var ten = f.getName();
+    if (ten.indexOf(MANIFEST_SUFFIX) !== ten.length - MANIFEST_SUFFIX.length) continue;
+
+    var ds;
+    try {
+      var m = JSON.parse(f.getBlob().getDataAsString());
+      ds = (m && m.pos) || [];
+    } catch (e) {
+      // Manifest hỏng: _poDaLaySlip_ cũng bỏ qua nó, tức nó KHÔNG bảo vệ PO nào.
+      // Nhưng vẫn không tự xoá — để người xem, vì nó là dấu hiệu run.mjs ghi lỗi.
+      loi.push({ ten: ten, ly_do: 'JSON hong' });
+      continue;
+    }
+
+    var chuaCo = [];
+    for (var i = 0; i < ds.length; i++) {
+      var po = _poKey(String(ds[i]).trim());
+      if (!/^\d{8}$/.test(po)) continue;
+      if (!_coFilePackingSlip_(po)) chuaCo.push(po);
+    }
+
+    if (chuaCo.length) {
+      giu.push({ ten: ten, con_thieu: chuaCo });
+    } else {
+      xoa.push({ ten: ten, so_po: ds.length });
+      if (thatSu) f.setTrashed(true);
+    }
+  }
+
+  return _json({
+    ok: true, thatSu: thatSu,
+    daXoa: thatSu ? xoa.length : 0, seXoa: thatSu ? 0 : xoa.length,
+    xoa: xoa, giu: giu, loi: loi
+  });
 }
 
 /* GET: mặc định trả "alive"; có ?action= thì phục vụ luôn (dùng cho VM/HTTP client). */
@@ -477,6 +551,7 @@ function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
     if (p.action === 'needSlip') return _needSlip(p);
+    if (p.action === 'donDepManifest') return _donDepManifest(p);
     if (p.action === 'lookup' && p.pos) {
       return _lookup({ pos: String(p.pos).split(',').map(function (x) { return x.trim(); }) });
     }

@@ -216,9 +216,15 @@ mỗi SKU một dòng. Loại gỗ = chữ sau `Unfinished` ở cột B của `p
   chỉ có **sau bước tách tay**, nên khoảng giữa "đã tải" và "đã tách" là mù, chạy lại là submit trùng.
   ⚠️ Sửa nằm trong `NhanFile_Drive_WebApp.gs` → **phải Deploy ▸ New version mới có tác dụng**.
   Chưa deploy thì `--dedup` vẫn chạy theo luật cũ.
-- **Bản VM chưa chạy thật.** Đã viết ở `10_VM_Tool/`, chưa test trên VM. Phần dễ vỡ nhất là
-  **đăng nhập SSO**: `sso.auth.commercehub.com` (OAuth/Frontegg), không có API key.
-  Session chết là **trạng thái bình thường** — script phải dừng lô và báo, không chạy tiếp.
+- **Bản VM ĐÃ CHẠY THẬT 05/08/2026.** Lô đầu (2 PO) đi trọn submit → Drive. Nay tự tách file gộp
+  thành `<PO>_PackingSlip.pdf` (`tachTheoPO`, khảo sát 11 file: mỗi slip 1 trang, mỗi trang 1 PO).
+  Chạy tự động qua cron: `*/30 7-19 * * 1-5 chay-dinh-ky.sh` (có flock, `--max 15`, log ICT).
+- **Session DSM chỉ sống vài tiếng** — đo 05/08: đăng nhập 10:53, chết trước 15:46. Đăng nhập lại
+  **bắt buộc có người** (`sso.auth.commercehub.com`, OAuth/Frontegg, không API key) qua Xvfb+VNC.
+  → Cron ghi `ma 3` phần lớn thời gian là **bình thường**, không phải bug. Chưa rõ hoạt động
+  định kỳ có gia hạn session không.
+- **Chưa kiểm chứng thực địa:** vòng lặp tải nhiều file chờ trong một lô, và `tachTheoPO` trên
+  file gộp nhiều PO (mới test trên file tự ghép từ slip thật).
 - `carrier.csv` thiếu **AK** và **HI**. NCA và SCA cho kết quả giống nhau.
 - Folder Drive cũ `1ER7RWu-66baF1uvB4AuBByN7OS-FJdAI` (cấu trúc phẳng): để nguyên lưu trữ, không dùng.
 - **Sheet có nhiều người sửa cùng lúc** — luôn lấy danh sách PO ngay trước khi submit, đừng dùng lại

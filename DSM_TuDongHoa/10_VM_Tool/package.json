@@ -10,8 +10,12 @@
     "start": "node run.mjs",
     "daily": "node run.mjs --dedup"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.2.108",
     "playwright": "^1.62.1"
   }
 }

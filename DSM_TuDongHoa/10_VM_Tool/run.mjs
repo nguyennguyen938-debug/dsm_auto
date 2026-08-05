@@ -20,6 +20,7 @@ import * as D from './dsm.mjs';
 
 const STATE = process.env.DSM_STATE || './storageState.json';
 const OUTDIR = process.env.DSM_OUT || './downloads';
+const SLIPDIR = process.env.DSM_SLIP || path.join(OUTDIR, '..', 'packingslip');
 
 const argv = process.argv.slice(2);
 const has = f => argv.includes(f);
@@ -39,6 +40,7 @@ async function main() {
     process.exit(2);
   }
   await fs.mkdir(OUTDIR, { recursive: true });
+  await fs.mkdir(SLIPDIR, { recursive: true });
 
   const browser = await chromium.launch({ headless: true });
   const ctx = await browser.newContext({ storageState: STATE });
@@ -128,6 +130,27 @@ async function main() {
       if (mf.ok) {
         soFileXong++;
         log(`✅ manifest ${f.fid}_manifest.json (${mf.ghiChu}) — ${f.pos.length} PO da chot`);
+
+        // --- 7. TACH thanh <PO>_PackingSlip.pdf, day len _INBOX
+        //     Loi o day KHONG lam mat don: manifest da ghi xong o tren nen lan chay sau
+        //     van bo qua cac PO nay, khong submit trung. File goc con o dia + Drive.
+        try {
+          const mieng = await D.tachTheoPO(buf, f.pos);
+          for (const m of mieng) {
+            const ten = `${m.po}_PackingSlip.pdf`;
+            await fs.writeFile(path.join(SLIPDIR, ten), m.buf);
+            const u = await D.uploadToInbox(req, ten, m.buf);
+            log(u.ok ? `   ✅ ${ten} (${m.soTrang} trang)` : `   ❌ ${ten} khong len duoc Drive (${u.ghiChu})`);
+            if (!u.ok) process.exitCode = 9;
+          }
+        } catch (e) {
+          process.exitCode = 9;
+          console.error(
+            `\n⚠️  KHONG tach duoc ${f.fid}.pdf: ${e.message}\n` +
+            `   Khong mat don — manifest da ghi, lan sau se KHONG submit trung.\n` +
+            `   File goc van con: ${path.join(OUTDIR, f.fid + '.pdf')} va tren Drive _INBOX.\n` +
+            `   -> Tach tay file do thanh <PO>_PackingSlip.pdf.\n`);
+        }
       } else {
         process.exitCode = 7;
         console.error(

@@ -263,6 +263,80 @@ async function uploadRawToInbox(req, filename, base64, mimeType) {
   return { ok: false, ghiChu: note };
 }
 
+/* --- BƯỚC 7b: tách file gộp thành từng packing slip -------------------- */
+
+/**
+ * Tách PDF gộp thành [{po, buf}] — mỗi PO một file.
+ *
+ * KHẢO SÁT 05/08/2026 trên 11 file thật (9 file đã tách tay + 2 file tải hôm nay):
+ * mỗi packing slip đúng **1 trang**, mỗi trang chứa đúng **một** số 8 chữ số và số đó
+ * chính là PO. Không có trang nào mơ hồ.
+ *
+ * Dù vậy code vẫn KHÔNG giả định 1 trang/PO: trang nào không đọc ra PO thì gộp vào PO
+ * của trang trước (slip nhiều trang). Giả định sai ở đây nghĩa là **gửi nhầm packing
+ * slip cho đơn khác** — sai lầm đắt hơn nhiều so với việc viết thêm mấy dòng phòng xa.
+ *
+ * `poMongDoi` (lấy từ pendingFiles) là mạng an toàn chính:
+ *   - lọc ứng viên 8 chữ số về đúng những PO đáng lẽ có trong file
+ *   - đối chiếu tập đọc được với tập mong đợi; LỆCH LÀ NÉM LỖI, không trả kết quả nửa vời
+ */
+export async function tachTheoPO(buf, poMongDoi = null) {
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const { PDFDocument } = await import('pdf-lib');
+
+  const doc = await getDocument({ data: new Uint8Array(buf), useSystemFonts: true }).promise;
+  const mong = poMongDoi ? new Set(poMongDoi.map(String)) : null;
+
+  // 1) đọc PO của từng trang
+  const poTrang = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const tc = await (await doc.getPage(i)).getTextContent();
+    const txt = tc.items.map(x => x.str).join(' ');
+    let ung = [...new Set(txt.match(/\b\d{8}\b/g) || [])];
+    if (mong) {
+      const loc = ung.filter(x => mong.has(x));
+      if (loc.length) ung = loc;                  // ưu tiên PO đang chờ, bỏ số 8 chữ số lạ
+    }
+    poTrang.push(ung.length === 1 ? ung[0] : null);   // 0 hoặc nhiều -> chưa xác định
+  }
+
+  // 2) trang chưa xác định -> thuộc về PO của trang trước
+  for (let i = 0; i < poTrang.length; i++) {
+    if (!poTrang[i] && i > 0) poTrang[i] = poTrang[i - 1];
+  }
+  if (!poTrang[0]) throw new Error('tachTheoPO: trang dau khong doc ra PO — khong tach duoc');
+
+  // 3) đối chiếu với danh sách mong đợi TRƯỚC khi cắt
+  if (mong) {
+    const thay = new Set(poTrang);
+    const thieu = [...mong].filter(p => !thay.has(p));
+    const la = [...thay].filter(p => !mong.has(p));
+    if (thieu.length || la.length) {
+      throw new Error('tachTheoPO: PO doc duoc KHONG khop danh sach cho' +
+        (thieu.length ? ` | thieu: ${thieu.join(', ')}` : '') +
+        (la.length ? ` | la: ${la.join(', ')}` : ''));
+    }
+  }
+
+  // 4) cắt theo nhóm trang liền nhau cùng PO
+  const goc = await PDFDocument.load(buf);
+  const nhom = [];
+  for (let i = 0; i < poTrang.length; i++) {
+    const cuoi = nhom[nhom.length - 1];
+    if (cuoi && cuoi.po === poTrang[i]) cuoi.trang.push(i);
+    else nhom.push({ po: poTrang[i], trang: [i] });
+  }
+
+  const ra = [];
+  for (const n of nhom) {
+    const moi = await PDFDocument.create();
+    const trang = await moi.copyPages(goc, n.trang);
+    for (const t of trang) moi.addPage(t);
+    ra.push({ po: n.po, soTrang: n.trang.length, buf: Buffer.from(await moi.save()) });
+  }
+  return ra;
+}
+
 /* --- BƯỚC 8: ghi manifest — ĐÂY LÀ THỨ BỊT LỖ SUBMIT TRÙNG ------------- */
 
 /**

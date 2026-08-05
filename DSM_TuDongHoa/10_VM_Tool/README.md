@@ -1,8 +1,13 @@
 # 10_VM_Tool — Tool tải Packing Slip chạy tự động (Node + Playwright)
 
 Bản chạy **không cần Claude in Chrome**. Dùng được trên máy cá nhân hoặc VM.
-Trạng thái: **đã viết, CHƯA chạy thật trên VM.** Logic đã kiểm chứng qua bản chạy-trong-tab
-(xem `../07_Plan_AutoPackingSlip.md`).
+
+Trạng thái **05/08/2026: ĐÃ CHẠY THẬT trên VM.** Lô đầu tiên (2 PO `78784022`, `78821006`)
+đi trọn từ submit tới Drive. Lô đó cũng lộ ra bug "chỉ tải file chờ đầu tiên" — xem mục
+*Một lô có thể sinh NHIỀU file chờ* bên dưới.
+
+**Chưa được kiểm chứng thực địa:** vòng lặp tải nhiều file chờ trong một lô, và `tachTheoPO`
+với file gộp nhiều PO (mới chỉ test trên file tự ghép từ slip thật).
 
 ## Cài
 
@@ -21,10 +26,15 @@ node login.mjs
 Mở Chromium có giao diện, **bạn tự nhập mật khẩu**. Script chỉ lưu cookie vào
 `storageState.json` (chmod 600). Không đọc, không lưu mật khẩu.
 
-VM headless thì chạy `login.mjs` trên máy cá nhân rồi **copy `storageState.json` lên VM**
-(hoặc dùng xvfb + VNC).
+VM headless thì chạy `login.mjs` trên máy cá nhân rồi **copy `storageState.json` lên VM**,
+hoặc dựng màn hình ảo ngay trên VM — **cách đang dùng**, xem `../11_TaiVe/README.md`.
 
 > `storageState.json` chứa cookie phiên — coi như mật khẩu. Đừng commit, đừng chia sẻ.
+
+⚠️ **Session DSM chỉ sống vài tiếng.** Đo 05/08: đăng nhập 10:53, tới 15:46 đã chết sau khi
+nằm im. Đăng nhập lại **bắt buộc có người** (`sso.auth.commercehub.com` là OAuth/Frontegg,
+không có API key). Nên cron sẽ ghi `ma 3` phần lớn thời gian — **đó là bình thường, không phải bug.**
+Chưa rõ hoạt động định kỳ có gia hạn được session không; chạy vài ngày sẽ biết.
 
 ## Chạy
 
@@ -36,7 +46,8 @@ node run.mjs --only 78821006       # chỉ 1 PO (nhiều PO thì cách nhau bằ
 node run.mjs --max 10              # giới hạn số PO mỗi lô
 ```
 
-Biến môi trường: `DSM_STATE` (mặc định `./storageState.json`) · `DSM_OUT` (mặc định `./downloads`).
+Biến môi trường: `DSM_STATE` (mặc định `./storageState.json`) · `DSM_OUT` (mặc định `./downloads`) ·
+`DSM_SLIP` (mặc định `<DSM_OUT>/../packingslip`, nơi để file đã tách).
 
 ## Nó làm gì
 
@@ -47,7 +58,26 @@ Biến môi trường: `DSM_STATE` (mặc định `./storageState.json`) · `DSM
 4. doiDuSlip           -> đợi tới khi MỌI PO đã submit đều có slip (tối đa 60 s)
 5. pendingFiles        -> TẤT CẢ file chờ, không phải chỉ file đầu tiên
 6. với TỪNG file: downloadPdf (kiểm %PDF) -> uploadToInbox -> writeManifest
+7. tachTheoPO       -> cắt file gộp thành <PO>_PackingSlip.pdf, đẩy lên _INBOX
 ```
+
+### Tách file tự động (thêm 05/08/2026)
+
+Trước đây phải tách tay, và chính khoảng chờ đó là lý do phải có manifest.
+
+**Khảo sát 11 file thật:** mỗi packing slip đúng **1 trang**, mỗi trang chứa đúng **một** số
+8 chữ số và số đó là PO. Dù vậy `tachTheoPO()` không giả định 1 trang/PO — trang nào không đọc
+ra PO thì gộp vào PO của trang trước. Đoán sai ở đây nghĩa là **gửi nhầm packing slip cho đơn
+khác**, đắt hơn nhiều so với vài dòng phòng xa.
+
+**Mạng an toàn:** `pendingFiles()` đã cho biết file chứa PO nào. `tachTheoPO()` đối chiếu tập PO
+đọc được với tập mong đợi; **lệch là ném lỗi**, không trả kết quả nửa vời. Lỗi tách **không làm
+mất đơn** vì manifest đã ghi xong trước đó — lần chạy sau vẫn không submit trùng, và file gốc
+vẫn còn cả trên đĩa lẫn Drive để tách tay.
+
+File tách vào thẳng **`_INBOX`**, chưa vào `PO - <po>`, vì ở bước này chưa biết carrier nên chưa
+có ngày pickup, mà `makeFolder` cần ngày pickup mới tạo được folder. Dedup vì vậy chấp nhận
+`<PO>_PackingSlip.pdf` ở **`_INBOX` hoặc `PO - <po>`** — cả hai đều là vị trí chính xác.
 
 ### ⚠️ Một lô có thể sinh NHIỀU file chờ (sửa 05/08/2026)
 
@@ -60,8 +90,7 @@ file 2 **không ai tải**. Submit thì đã gửi, không hoàn tác được, 
 
 Dùng `pendingFiles()` (số nhiều). `pendingFile()` giữ lại chỉ để tương thích — **đừng dùng cho lô**.
 
-**Không** tách trang, **không** đặt tên theo PO, **không** tạo folder ngày —
-việc đọc và phân loại do Claude làm ở bước sau.
+**Không** tạo folder ngày, **không** điền sheet — hai việc đó thuộc bước ④, xem `../00_README.md`.
 
 ### Manifest — thứ giữ cho không submit trùng (thêm 05/08/2026)
 
@@ -70,7 +99,7 @@ Khoảng giữa "đã tải file gộp" và "đã tách xong" là **mù hoàn to
 sẽ submit reprint lần nữa, mà **Submit không hoàn tác được**.
 
 `writeManifest` ghi `<fid>_manifest.json` vào `_INBOX` ngay sau khi tải, liệt kê PO **thật sự
-nằm trong file** (lấy từ `pendingFile`, không lấy danh sách đã submit). `needSlip&checkSlip=1`
+nằm trong file** (lấy từ `pendingFiles`, không lấy danh sách đã submit). `needSlip&checkSlip=1`
 đọc các manifest này nên biết ngay, không phải đợi tách file.
 
 **Thứ tự upload PDF trước, manifest sau — không được đảo:**
@@ -96,16 +125,23 @@ nằm trong file** (lấy từ `pendingFile`, không lấy danh sách đã submi
 | 6 | Tải được nhưng **không upload được lên Drive** |
 | 7 | PDF đã lên Drive nhưng **không ghi được manifest** → chạy lại sẽ **submit trùng**, xem log để biết PO nào |
 | 8 | Có PO **đã submit nhưng slip không xuất hiện** sau 60 s → kiểm tay danh sách reprint trên DSM **trước khi** chạy lại |
+| 9 | **Tách file thất bại** (hoặc file tách không lên được Drive). Không mất đơn — manifest đã ghi. Tách tay file gốc trong `_INBOX` |
 
-## Cron
+## Cron — ĐANG CHẠY
+
+Gọi qua `chay-dinh-ky.sh`, **đừng gọi `run.mjs` thẳng từ cron** (thiếu flock, thiếu `--max`,
+thiếu dịch mã thoát):
 
 ```cron
-# 07:00 mỗi ngày làm việc
-0 7 * * 1-5 cd /opt/dsm-tool && /usr/bin/node run.mjs --dedup >> /var/log/dsm-tool.log 2>&1
+*/30 7-19 * * 1-5 /home/Lenovo/dsm_auto/DSM_TuDongHoa/10_VM_Tool/chay-dinh-ky.sh
 ```
 
-Nên gắn cảnh báo khi exit code **3** (hết session) và **6** (không lên Drive) — hai lỗi này
-im lặng thì lô sẽ thiếu file mà không ai biết.
+Log: `../11_TaiVe/logs/dsm-tool.log`. Chạy thử không submit: `DSM_DRY=1 ./chay-dinh-ky.sh`.
+
+⚠️ Mốc giờ trong log **lệch nhau**: dòng của wrapper là ICT, dòng của `run.mjs` là UTC (chênh 7 tiếng).
+
+Đáng gắn cảnh báo cho mã **6, 7, 8, 9** — bốn mã này im lặng thì lô thiếu file mà không ai biết.
+Mã **3** thì gặp thường xuyên (session hết hạn), cảnh báo mỗi lần sẽ thành nhiễu.
 
 ## Điều PHẢI biết trước khi sửa code
 
@@ -118,13 +154,15 @@ im lặng thì lô sẽ thiếu file mà không ai biết.
    "Receiver alive" xảy ra liên tục.
 5. **Apps Script thỉnh thoảng trả HTML** → phải có vòng lặp gọi lại. Đã có trong `uploadToInbox`
    và `needSlip`.
-6. **File reprint dồn tích**: chưa Download thì Submit thêm vẫn vào cùng file. Vì vậy phải
-   submit hết lô rồi mới tải một lần.
+6. **Một lô có thể sinh NHIỀU file chờ** — xem mục riêng ở trên. Vẫn submit hết lô rồi mới tải,
+   nhưng phải tải **hết** file chờ, đừng chỉ lấy file đầu tiên.
 7. **Sheet có nhiều người sửa cùng lúc** — luôn gọi `needSlip` ngay trước khi submit.
 
 ## Chưa làm
 
-- [ ] Chạy thật trên VM (chưa test lần nào ngoài môi trường Cowork).
-- [ ] Tự phát hiện session sắp hết để đăng nhập lại — hiện chỉ dừng và báo.
+- [x] ~~Chạy thật trên VM~~ — xong 05/08/2026.
+- [ ] Chuyển `<PO>_PackingSlip.pdf` từ `_INBOX` vào `PO - <po>` ở bước ④.
+- [ ] Tự phát hiện session sắp hết để đăng nhập lại — hiện chỉ dừng và báo. Bị chặn bởi SSO
+      (OAuth/Frontegg, không có API key), nhiều khả năng **không tự động hoá được**.
 - [ ] Phần điền form carrier (AACT/CTII) bằng Playwright. Đây là phần giòn nhất,
       xem `../01_HuongDan_VanHanh/4_Playbook_AACT.md` lỗi #12–#20 trước khi bắt đầu.
