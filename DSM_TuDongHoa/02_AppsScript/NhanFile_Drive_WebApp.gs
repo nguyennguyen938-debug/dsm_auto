@@ -404,7 +404,7 @@ function _needSlip(body) {
       if (daLay[pos[k]]) {
         skipped.push({ po: pos[k], ly_do: 'da co trong manifest ' + daLay[pos[k]] });
       } else if (_coFilePackingSlip_(pos[k])) {
-        skipped.push({ po: pos[k], ly_do: 'da co <PO>_PackingSlip.pdf trong cay THD Orders' });
+        skipped.push({ po: pos[k], ly_do: 'da co <PO>_PackingSlip.pdf (trong _INBOX hoac folder PO - <po>)' });
       } else {
         con.push(pos[k]);
       }

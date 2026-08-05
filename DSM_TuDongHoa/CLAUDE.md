@@ -223,8 +223,10 @@ mỗi SKU một dòng. Loại gỗ = chữ sau `Unfinished` ở cột B của `p
   **bắt buộc có người** (`sso.auth.commercehub.com`, OAuth/Frontegg, không API key) qua Xvfb+VNC.
   → Cron ghi `ma 3` phần lớn thời gian là **bình thường**, không phải bug. Chưa rõ hoạt động
   định kỳ có gia hạn session không.
-- **Chưa kiểm chứng thực địa:** vòng lặp tải nhiều file chờ trong một lô, và `tachTheoPO` trên
-  file gộp nhiều PO (mới test trên file tự ghép từ slip thật).
+- **Đã kiểm chứng đủ 05/08.** Lô 1: 2 PO → DSM tách **2 file**. Lô 2: 4 PO → DSM gộp **1 file**
+  4 trang. Cả hai hành vi đều thật, không đoán trước được — đó là lý do phải duyệt hết `pendingFiles`.
+  `tachTheoPO` cắt đúng, số ký tự từng mảnh khớp tuyệt đối với trang nguồn.
+  Vòng đời dedup chạy đủ: chặn bằng manifest → `donDepManifest` xoá → vẫn chặn bằng file đã tách.
 - `carrier.csv` thiếu **AK** và **HI**. NCA và SCA cho kết quả giống nhau.
 - Folder Drive cũ `1ER7RWu-66baF1uvB4AuBByN7OS-FJdAI` (cấu trúc phẳng): để nguyên lưu trữ, không dùng.
 - **Sheet có nhiều người sửa cùng lúc** — luôn lấy danh sách PO ngay trước khi submit, đừng dùng lại

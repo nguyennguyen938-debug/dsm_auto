@@ -6,8 +6,13 @@ Trạng thái **05/08/2026: ĐÃ CHẠY THẬT trên VM.** Lô đầu tiên (2 P
 đi trọn từ submit tới Drive. Lô đó cũng lộ ra bug "chỉ tải file chờ đầu tiên" — xem mục
 *Một lô có thể sinh NHIỀU file chờ* bên dưới.
 
-**Chưa được kiểm chứng thực địa:** vòng lặp tải nhiều file chờ trong một lô, và `tachTheoPO`
-với file gộp nhiều PO (mới chỉ test trên file tự ghép từ slip thật).
+**Lô 2 (16:01 ngày 05/08) — 4 PO, đã kiểm chứng nốt phần còn thiếu.** DSM lần này **gộp cả 4 PO
+vào MỘT file** `22576648112` (4 trang, 241 KB), ngược với lô 1 tách thành 2 file. Xác nhận cả hai
+hành vi đều có thật, không đoán trước được. `tachTheoPO` cắt đúng 4 mảnh; số ký tự mỗi mảnh khớp
+tuyệt đối với trang nguồn (3211 · 3234 · 3222 · 3217).
+
+Vòng đời dedup cũng đã chạy đủ trên hệ thống thật: chặn bằng manifest → xoá manifest bằng
+`donDepManifest` → **vẫn chặn** bằng `<PO>_PackingSlip.pdf`. Lý do bỏ qua tự đổi giữa hai nguồn.
 
 ## Cài
 
