@@ -135,13 +135,27 @@ gọi kèm `isLive=true`; **đừng bắt chước**. Dùng `downloadFile.do?fil
 Đã từng lưu một trang HTML vào Drive dưới tên `.pdf` và web app vẫn trả `ok:true`.
 → **Luôn kiểm 2 lớp: `blob.type` chứa `pdf` VÀ 5 byte đầu là `%PDF`.** HTML ~57–59 KB, PDF ~70–130 KB.
 
-### Cơ chế gộp file — đã xác minh
+### Cơ chế gộp file — 🔴 SỬA LẠI 05/08/2026, bản cũ SAI
 
-File reprint là **một file chờ dồn tích**: chưa Download thì Submit thêm đơn vẫn vào **cùng file đó**
-(số slip tăng, mốc thời gian tạo file không đổi). Sau khi Download, file rời khỏi danh sách chờ.
+Bản cũ ghi: "file reprint là **một** file chờ dồn tích, Submit thêm đơn vẫn vào cùng file đó".
+**Không đúng.** Chạy thật 05/08: submit 2 PO cách nhau 5 giây → DSM tạo **HAI file riêng**:
 
-→ **Submit hết cả lô rồi mới Download một lần.** Bấm Download giữa lô = cắt lô, các PO sau nằm ở file
-khác, dễ bỏ sót — mà Submit không hoàn tác được.
+```
+22576343885 -> 78784022
+22576391163 -> 78821006
+```
+
+Có dồn tích thật, nhưng **không phải lúc nào cũng dồn** — không đoán được khi nào tách khi nào gộp.
+
+→ **Luôn duyệt HẾT danh sách file chờ, đừng bao giờ chỉ lấy file đầu tiên.**
+Đây chính là bug đã suýt làm mất slip của `78821006`: `pendingFile()` có `break` ở file đầu,
+tải xong file 1 là dừng, file 2 nằm lại không ai tải. Mà Submit thì đã gửi rồi — lần chạy sau
+sẽ submit lại đúng PO đó = **lệnh reprint trùng**. Đã sửa bằng `pendingFiles()` (số nhiều).
+
+Vẫn đúng: sau khi Download, file rời khỏi danh sách chờ. Và **Submit hết cả lô rồi mới Download**.
+
+DSM sinh file **có độ trễ** — dùng `doiDuSlip()` để đợi đủ slip (mặc định 60 s) trước khi tải,
+đừng gọi `pendingFiles()` ngay sau submit rồi tin luôn kết quả.
 
 ### Các thông số khác
 
@@ -196,8 +210,12 @@ mỗi SKU một dòng. Loại gỗ = chữ sau `Unfinished` ở cột B của `p
   trigger `processOrders` **đã xoá 04/08 — không tạo lại**. Cột M người dùng ghi tay.
 - Trigger đang chạy: `fillPro` (info@, 15′) · `checkMarioPro` (b2b@, 15′) ·
   `checkRithumOrders` (rithumgetorder@, 10′).
-- **Dedup của tool chưa bật.** `needSlip&checkSlip=1` có sẵn nhưng đang tắt vì còn test →
-  PO đã lấy slip sẽ bị submit lại.
+- **Dedup đã bịt kín nhưng CHƯA DEPLOY** (05/08/2026). `needSlip&checkSlip=1` giờ kiểm hai nguồn:
+  `<fid>_manifest.json` trong `_INBOX` (do `run.mjs` ghi ngay sau khi tải) **và**
+  `<PO>_PackingSlip.pdf` trong folder `PO - <po>`. Trước đây chỉ kiểm nguồn thứ hai — mà file đó
+  chỉ có **sau bước tách tay**, nên khoảng giữa "đã tải" và "đã tách" là mù, chạy lại là submit trùng.
+  ⚠️ Sửa nằm trong `NhanFile_Drive_WebApp.gs` → **phải Deploy ▸ New version mới có tác dụng**.
+  Chưa deploy thì `--dedup` vẫn chạy theo luật cũ.
 - **Bản VM chưa chạy thật.** Đã viết ở `10_VM_Tool/`, chưa test trên VM. Phần dễ vỡ nhất là
   **đăng nhập SSO**: `sso.auth.commercehub.com` (OAuth/Frontegg), không có API key.
   Session chết là **trạng thái bình thường** — script phải dừng lô và báo, không chạy tiếp.

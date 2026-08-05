@@ -14,3 +14,7 @@ npm-debug.log*
 # Rác hệ điều hành
 .DS_Store
 Thumbs.db
+
+# Python
+__pycache__/
+*.pyc

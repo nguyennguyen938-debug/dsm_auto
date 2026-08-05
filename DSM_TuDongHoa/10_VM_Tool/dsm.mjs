@@ -157,24 +157,66 @@ export async function submitReprint(req, po) {
 
 /* --- BƯỚC 5: file chờ + PO bên trong ----------------------------------- */
 
-export async function pendingFile(req) {
+/** Danh sách PO nằm trong một file chờ. */
+async function poTrongFile(req, fid) {
+  const h = await (await req.get(`${R}gotoViewFileContents.do?FID=${fid}&FNAME=${fid}.pdf`)).text();
+  const pos = [];
+  for (const td of h.match(/<td\b[\s\S]*?<\/td>/gi) || []) {
+    const t = td.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    if (/^\d{8}$/.test(t)) pos.push(t);
+  }
+  return pos;
+}
+
+/**
+ * TẤT CẢ file đang chờ, không chỉ file đầu tiên.
+ *
+ * 🔴 05/08/2026 — BẰNG CHỨNG THỰC TẾ, sửa lại mô tả cũ:
+ * Tài liệu từng ghi "file reprint là MỘT file chờ dồn tích". KHÔNG ĐÚNG HẲN.
+ * Lô 05/08 submit 2 PO liền nhau (cách 5 giây) thì DSM tạo **HAI file riêng**:
+ *   22576343885 -> 78784022 · 22576391163 -> 78821006
+ * Bản cũ của hàm này `break` ngay ở file đầu tiên, nên tải xong file 1 là dừng;
+ * slip của PO thứ hai nằm lại trong file 2 và KHÔNG AI TẢI. Submit thì đã gửi rồi,
+ * không hoàn tác được -> lần chạy sau sẽ submit lại chính PO đó = lệnh reprint trùng.
+ *
+ * Vì vậy: LUÔN duyệt hết danh sách. Đừng bao giờ giả định chỉ có một file.
+ */
+export async function pendingFiles(req) {
   const h1 = await (await req.get(R + 'gotoViewPackslipReprint.do')).text();
-  let fid = null, soSlip = null;
+  const ds = [];
   for (const tr of h1.match(/<tr\b[\s\S]*?<\/tr>/gi) || []) {
     const td = cells(tr);
     if (td.length < 5) continue;
     const m = (td[1] || '').match(/^(\d+)\.pdf$/i);
-    if (m) { fid = m[1]; soSlip = td[3]; break; }
+    if (m) ds.push({ fid: m[1], soSlip: td[3] });
   }
-  if (!fid) return null;
+  for (const f of ds) f.pos = await poTrongFile(req, f.fid);
+  return ds;
+}
 
-  const h2 = await (await req.get(`${R}gotoViewFileContents.do?FID=${fid}&FNAME=${fid}.pdf`)).text();
-  const pos = [];
-  for (const td of h2.match(/<td\b[\s\S]*?<\/td>/gi) || []) {
-    const t = td.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-    if (/^\d{8}$/.test(t)) pos.push(t);
+/** Giữ lại cho tương thích: chỉ trả file chờ đầu tiên. Lô nhiều PO thì dùng pendingFiles(). */
+export async function pendingFile(req) {
+  const ds = await pendingFiles(req);
+  return ds[0] || null;
+}
+
+/**
+ * Đợi tới khi mọi PO trong `canCo` đều xuất hiện ở một file chờ nào đó.
+ * DSM không sinh file tức thì — lô 05/08 thấy độ trễ vài giây.
+ * Hết `hanMs` mà vẫn thiếu thì TRẢ VỀ NGUYÊN TRẠNG, để bên gọi quyết định (đừng tự ý tải).
+ */
+export async function doiDuSlip(req, canCo, { hanMs = 60000, nhipMs = 5000, log = () => {} } = {}) {
+  const t0 = Date.now();
+  let ds = [];
+  for (;;) {
+    ds = await pendingFiles(req);
+    const co = new Set(ds.flatMap(f => f.pos));
+    const thieu = canCo.filter(p => !co.has(p));
+    if (!thieu.length) return { ds, thieu: [], doiMs: Date.now() - t0 };
+    if (Date.now() - t0 >= hanMs) return { ds, thieu, doiMs: Date.now() - t0 };
+    log(`cho them ${thieu.length} slip (${thieu.join(', ')}) — da doi ${Math.round((Date.now() - t0) / 1000)}s`);
+    await new Promise(s => setTimeout(s, nhipMs));
   }
-  return { fid, soSlip, pos };
 }
 
 /* --- BƯỚC 6: tải PDF -------------------------------------------------- */
@@ -201,11 +243,13 @@ export async function downloadPdf(req, fid) {
  * PHẢI có vòng lặp: test 05/08 lần POST đầu Apps Script trả HTML -> thất bại im lặng.
  */
 export async function uploadToInbox(req, filename, buf) {
+  return uploadRawToInbox(req, filename, buf.toString('base64'), 'application/pdf');
+}
+
+/** Lõi chung của mọi lần POST base64 lên _INBOX. Kiểm o.id, KHÔNG kiểm o.ok. */
+async function uploadRawToInbox(req, filename, base64, mimeType) {
   const payload = JSON.stringify({
-    folderId: CFG.INBOX_FOLDER_ID,
-    filename,
-    base64: buf.toString('base64'),
-    mimeType: 'application/pdf'
+    folderId: CFG.INBOX_FOLDER_ID, filename, base64, mimeType
   });
   let note = '';
   for (let lan = 1; lan <= 4; lan++) {
@@ -217,4 +261,29 @@ export async function uploadToInbox(req, filename, buf) {
     await new Promise(s => setTimeout(s, 2500));
   }
   return { ok: false, ghiChu: note };
+}
+
+/* --- BƯỚC 8: ghi manifest — ĐÂY LÀ THỨ BỊT LỖ SUBMIT TRÙNG ------------- */
+
+/**
+ * Ghi <fid>_manifest.json vào _INBOX, liệt kê PO NẰM TRONG file vừa tải.
+ *
+ * ⚠️ PHẢI gọi SAU khi upload <fid>.pdf thành công, KHÔNG được gọi trước.
+ *    Manifest có mà PDF chưa lên = lần chạy sau bỏ qua những PO đó trong khi slip
+ *    chưa hề được lưu -> MẤT ĐƠN. Ngược lại (PDF có, manifest thiếu) chỉ dẫn tới
+ *    submit trùng — phiền, nhưng còn cứu được.
+ *
+ * Ghi `pos` lấy từ pendingFile() chứ KHÔNG lấy danh sách đã submit: chỉ PO thật sự
+ * nằm trong file tải về mới được coi là đã có slip.
+ */
+export async function writeManifest(req, fid, pos, extra = {}) {
+  const doc = JSON.stringify({
+    fid: String(fid),
+    taiLuc: new Date().toISOString(),
+    pos: pos.map(String),
+    ...extra
+  }, null, 1);
+  return uploadRawToInbox(req, `${fid}_manifest.json`,
+                          Buffer.from(doc, 'utf8').toString('base64'),
+                          'application/json');
 }

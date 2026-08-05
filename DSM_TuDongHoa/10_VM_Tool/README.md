@@ -31,7 +31,7 @@ VM headless thì chạy `login.mjs` trên máy cá nhân rồi **copy `storageSt
 ```bash
 node run.mjs --dry                 # CHỈ liệt kê PO, không submit gì — chạy cái này TRƯỚC
 node run.mjs                       # chạy thật
-node run.mjs --dedup               # bỏ PO đã có <PO>_PackingSlip.pdf trên Drive
+node run.mjs --dedup               # bỏ PO đã lấy slip (manifest + <PO>_PackingSlip.pdf)
 node run.mjs --only 78821006       # chỉ 1 PO (nhiều PO thì cách nhau bằng dấu phẩy)
 node run.mjs --max 10              # giới hạn số PO mỗi lô
 ```
@@ -44,13 +44,44 @@ Biến môi trường: `DSM_STATE` (mặc định `./storageState.json`) · `DSM
 1. checkSession        -> hết session thì DỪNG LÔ, exit 3. Không chạy tiếp.
 2. needSlip (GET)      -> PO có cột C và D đều trống
 3. submitReprint từng PO, nghỉ 1,5 s      ⛔ KHÔNG tải gì giữa lô
-4. pendingFile         -> fid + danh sách PO trong file, đối chiếu với lô đã submit
-5. downloadPdf         -> 1 file cho cả lô, kiểm %PDF, ghi ra ./downloads/<fid>.pdf
-6. uploadToInbox       -> Drive _INBOX tên <fid>.pdf, có vòng lặp lại
+4. doiDuSlip           -> đợi tới khi MỌI PO đã submit đều có slip (tối đa 60 s)
+5. pendingFiles        -> TẤT CẢ file chờ, không phải chỉ file đầu tiên
+6. với TỪNG file: downloadPdf (kiểm %PDF) -> uploadToInbox -> writeManifest
 ```
+
+### ⚠️ Một lô có thể sinh NHIỀU file chờ (sửa 05/08/2026)
+
+Tài liệu cũ nói file reprint là *một* file dồn tích. **Sai.** Chạy thật 05/08: submit 2 PO cách
+nhau 5 giây thì DSM tạo **hai file riêng** (`22576343885` → 78784022, `22576391163` → 78821006).
+
+Bản cũ của `pendingFile()` `break` ngay ở file đầu tiên → tải file 1 xong là dừng, slip trong
+file 2 **không ai tải**. Submit thì đã gửi, không hoàn tác được, nên lần chạy sau sẽ submit lại
+đúng PO đó = **lệnh reprint trùng**.
+
+Dùng `pendingFiles()` (số nhiều). `pendingFile()` giữ lại chỉ để tương thích — **đừng dùng cho lô**.
 
 **Không** tách trang, **không** đặt tên theo PO, **không** tạo folder ngày —
 việc đọc và phân loại do Claude làm ở bước sau.
+
+### Manifest — thứ giữ cho không submit trùng (thêm 05/08/2026)
+
+Dedup cũ tra tên `<PO>_PackingSlip.pdf`, mà file đó chỉ ra đời **sau bước tách file làm tay**.
+Khoảng giữa "đã tải file gộp" và "đã tách xong" là **mù hoàn toàn** — chạy lại trong khoảng đó
+sẽ submit reprint lần nữa, mà **Submit không hoàn tác được**.
+
+`writeManifest` ghi `<fid>_manifest.json` vào `_INBOX` ngay sau khi tải, liệt kê PO **thật sự
+nằm trong file** (lấy từ `pendingFile`, không lấy danh sách đã submit). `needSlip&checkSlip=1`
+đọc các manifest này nên biết ngay, không phải đợi tách file.
+
+**Thứ tự upload PDF trước, manifest sau — không được đảo:**
+
+| Tình huống | Hậu quả |
+|---|---|
+| PDF lên, manifest lên | ✅ bình thường |
+| PDF lên, manifest hỏng | submit trùng ở lần chạy sau — phiền, còn cứu được. Script **exit 7** và in rõ PO nào bị ảnh hưởng |
+| manifest lên, PDF hỏng | ⛔ **MẤT ĐƠN** — lần sau bỏ qua những PO đó trong khi slip chưa hề được lưu |
+
+Ô cuối cùng là lý do thứ tự này cố định trong code, đừng "tối ưu" lại.
 
 ## Mã thoát
 
@@ -63,6 +94,8 @@ việc đọc và phân loại do Claude làm ở bước sau.
 | 4 | Không PO nào submit được → không tải gì |
 | 5 | Không có file chờ trong danh sách reprint |
 | 6 | Tải được nhưng **không upload được lên Drive** |
+| 7 | PDF đã lên Drive nhưng **không ghi được manifest** → chạy lại sẽ **submit trùng**, xem log để biết PO nào |
+| 8 | Có PO **đã submit nhưng slip không xuất hiện** sau 60 s → kiểm tay danh sách reprint trên DSM **trước khi** chạy lại |
 
 ## Cron
 

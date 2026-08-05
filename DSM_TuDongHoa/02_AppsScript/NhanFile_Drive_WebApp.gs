@@ -27,6 +27,12 @@
 //    Mới: THD Orders / <DD Mon YYYY> / PO - <số PO> / SIGNED PRO#
 var PARENT_FOLDER_ID = '1hsWarcdjtK63CD8As9CtXqJTcUPg8oAw';   // "THD Orders"
 
+// _INBOX — nơi run.mjs để file PDF gộp thô <fid>.pdf VÀ file <fid>_manifest.json đi kèm.
+// Manifest là bằng chứng "PO này đã lấy slip rồi" ở thời điểm SỚM NHẤT có thể (ngay sau khi
+// tải), nên dedup không còn phụ thuộc bước tách file làm tay. Xem _poDaLaySlip_().
+var INBOX_FOLDER_ID = '18rFktqm_K_a9-RPW5S0o2fTkmmHITGKO';
+var MANIFEST_SUFFIX = '_manifest.json';
+
 // ⚙️ TRẦN SỐ ĐƠN MỖI NGÀY PICKUP
 //    Cột K đã có đủ MAX_PER_DAY hàng cho một ngày -> đơn tiếp theo dời sang ngày làm việc kế.
 //    Đếm MỌI hàng có ngày đó ở cột K (kể cả Ground, đơn người khác điền, đơn đã gửi mail).
@@ -358,8 +364,11 @@ function authorizeScopes() {
  *  mà KHÔNG cần đăng nhập Google — web app chạy dưới quyền info@.
  *
  *  Tuỳ chọn dedup (mặc định TẮT vì đang giai đoạn test):
- *    &checkSlip=1   -> quét Drive, bỏ PO đã có "<PO>_PackingSlip.pdf"
- *                      (chậm hơn: mỗi PO một lần tìm file)
+ *    &checkSlip=1   -> bỏ PO đã lấy slip. Kiểm THEO HAI NGUỒN, thứ tự rẻ trước:
+ *                      1. <fid>_manifest.json trong _INBOX  (run.mjs ghi NGAY sau khi tải)
+ *                      2. <PO>_PackingSlip.pdf trong folder "PO - <po>"  (sau khi tách tay)
+ *                      Nguồn 1 bịt khoảng mù giữa "đã tải" và "đã tách" — xem _poDaLaySlip_().
+ *                      Nguồn 2 chậm: mỗi PO một lần tìm file.
  *
  *  Trả: { ok:true, count, pos:[...], skipped:[{po, ly_do}], checkedSlip }
  *  ⚠️ Bên gọi kiểm **o.pos**, KHÔNG kiểm o.ok — xem bẫy "Receiver alive".
@@ -388,16 +397,79 @@ function _needSlip(body) {
   }
 
   if (checkSlip && pos.length) {
+    var daLay = _poDaLaySlip_();          // đọc manifest MỘT lần cho cả lô
     var con = [];
     for (var k = 0; k < pos.length; k++) {
-      var it = DriveApp.getFilesByName(pos[k] + '_PackingSlip.pdf');
-      if (it.hasNext()) skipped.push({ po: pos[k], ly_do: 'da co <PO>_PackingSlip.pdf tren Drive' });
-      else con.push(pos[k]);
+      if (daLay[pos[k]]) {
+        skipped.push({ po: pos[k], ly_do: 'da co trong manifest ' + daLay[pos[k]] });
+      } else if (_coFilePackingSlip_(pos[k])) {
+        skipped.push({ po: pos[k], ly_do: 'da co <PO>_PackingSlip.pdf trong cay THD Orders' });
+      } else {
+        con.push(pos[k]);
+      }
     }
     pos = con;
   }
 
   return _json({ ok: true, count: pos.length, pos: pos, skipped: skipped, checkedSlip: checkSlip });
+}
+
+/**
+ * Đọc mọi <fid>_manifest.json trong _INBOX -> { po: '<fid>' }.
+ *
+ * VÌ SAO CẦN: dedup cũ chỉ tra '<PO>_PackingSlip.pdf' — file đó chỉ ra đời SAU bước tách
+ * file làm tay. Khoảng giữa "đã tải file gộp" và "đã tách xong" là mù hoàn toàn: chạy lại
+ * trong khoảng đó sẽ submit reprint lần nữa, mà Submit KHÔNG HOÀN TÁC ĐƯỢC.
+ * Manifest do run.mjs ghi ngay sau khi tải, nên bịt đúng khoảng mù đó.
+ *
+ * Manifest hỏng thì BỎ QUA file đó, không ném lỗi: thà dedup sót (submit trùng — phiền)
+ * còn hơn _needSlip chết hẳn (cả lô đứng).
+ */
+function _poDaLaySlip_() {
+  var out = {};
+  try {
+    var it = DriveApp.getFolderById(INBOX_FOLDER_ID).getFiles();
+    while (it.hasNext()) {
+      var f = it.next();
+      if (f.isTrashed()) continue;
+      var ten = f.getName();
+      if (ten.indexOf(MANIFEST_SUFFIX) !== ten.length - MANIFEST_SUFFIX.length) continue;
+      try {
+        var m = JSON.parse(f.getBlob().getDataAsString());
+        var ds = (m && m.pos) || [];
+        for (var i = 0; i < ds.length; i++) {
+          var po = _poKey(String(ds[i]).trim());
+          if (/^\d{8}$/.test(po)) out[po] = m.fid || ten;
+        }
+      } catch (e) { /* manifest hỏng -> bỏ qua đúng file này */ }
+    }
+  } catch (e) { /* không mở được _INBOX -> coi như chưa có manifest nào */ }
+  return out;
+}
+
+/**
+ * Có '<PO>_PackingSlip.pdf' nằm trong cây "THD Orders" không?
+ *
+ * Hai điểm khác bản cũ:
+ *  1. Bỏ file trong Thùng rác. getFilesByName TRẢ CẢ FILE ĐÃ XOÁ -> PO từng xoá file sẽ bị
+ *     coi là "đã có" và BỎ SÓT ĐƠN.
+ *  2. Chỉ tính file nằm trong folder 'PO - <po>'. getFilesByName quét TOÀN BỘ Drive của info@,
+ *     nên một file trùng tên ở bất cứ đâu (bản nháp, thư mục cá nhân) cũng làm bỏ sót đơn.
+ */
+function _coFilePackingSlip_(po) {
+  var it = DriveApp.getFilesByName(po + '_PackingSlip.pdf');
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.isTrashed()) continue;
+    var ps = f.getParents();
+    while (ps.hasNext()) {
+      // .trim(): thực tế có folder "PO - 02562579 " dính dấu cách thừa.
+      // _poKey: folder cũ có thể mất số 0 đầu ("PO - 2562579") — vẫn phải khớp.
+      var m = ps.next().getName().trim().match(/^PO\s*-\s*(\d+)$/);
+      if (m && _poKey(m[1]) === po) return true;
+    }
+  }
+  return false;
 }
 
 /* GET: mặc định trả "alive"; có ?action= thì phục vụ luôn (dùng cho VM/HTTP client). */

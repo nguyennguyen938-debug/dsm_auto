@@ -293,6 +293,26 @@ File packing slip **gốc** `22567785321.pdf` chứa **16** packing slip.
 **Hệ quả cho thiết kế — đây là điều quan trọng nhất thu được:**
 > Submit reprint cho **N** đơn → chỉ cần **MỘT** lần `downloadFile.do` → tách trang theo PO.
 > Đúng như phương án tối ưu đã dự đoán. Không phải tải N file.
+
+---
+
+## 🔴 ĐÍNH CHÍNH 05/08/2026 — kết luận ngay trên KHÔNG ĐÚNG TỔNG QUÁT
+
+Quan sát 03/08 là thật, nhưng **không phải quy luật**. Chạy thật 05/08 submit 2 PO cách nhau
+5 giây thì DSM tạo **HAI file riêng**, mỗi file 1 slip:
+
+| File | PO |
+|---|---|
+| `22576343885` | `78784022` |
+| `22576391163` | `78821006` |
+
+Có lúc dồn, có lúc tách — **không dự đoán được**. Nên câu "chỉ cần MỘT lần `downloadFile.do`"
+là sai lầm nguy hiểm: `run.mjs` bản đầu lấy file chờ đầu tiên rồi dừng, khiến slip của
+`78821006` nằm lại không ai tải, trong khi Submit đã gửi và **không hoàn tác được**.
+
+> **Luật thay thế:** submit hết lô → đợi đủ slip (`doiDuSlip`, mặc định 60 s) → duyệt **HẾT**
+> danh sách file chờ (`pendingFiles`) → tải **từng** file. Số file tải về là **1 hoặc nhiều**,
+> không được giả định.
 > Và `gotoViewFileContents.do` cho biết trước file gồm PO nào để đối chiếu sau khi tách.
 
 ### 🔴 SỰ CỐ ĐÃ XẢY RA THẬT 04/08/2026 — HTML lưu dưới tên .pdf

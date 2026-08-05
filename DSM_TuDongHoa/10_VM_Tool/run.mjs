@@ -89,32 +89,62 @@ async function main() {
     }
     if (!ok.length) { console.error('\n❌ Khong PO nao submit duoc — khong tai gi ca.\n'); process.exit(4); }
 
-    // --- 3. file cho + doi chieu PO
-    const pf = await D.pendingFile(req);
-    if (!pf) { console.error('\n❌ Khong co file cho trong danh sach reprint.\n'); process.exit(5); }
-    log(`file cho: ${pf.fid} — ${pf.soSlip} slip — chua PO: ${pf.pos.join(', ')}`);
+    // --- 3. doi DU slip roi moi lay danh sach file cho
+    //     DSM co the tao NHIEU file cho mot lo (05/08: 2 PO -> 2 file rieng), va sinh file
+    //     co do tre. Phai doi du roi tai HET, khong duoc lay moi file dau tien.
+    const { ds: files, thieu, doiMs } = await D.doiDuSlip(req, ok, { log });
+    if (!files.length) { console.error('\n❌ Khong co file cho trong danh sach reprint.\n'); process.exit(5); }
+    log(`${files.length} file cho (doi ${Math.round(doiMs / 1000)}s):`);
+    for (const f of files) log(`   ${f.fid} — ${f.soSlip} slip — PO: ${f.pos.join(', ')}`);
 
-    const thieu = ok.filter(p => !pf.pos.includes(p));
-    const la = pf.pos.filter(p => !ok.includes(p));
-    if (thieu.length) log('⚠️  PO da submit nhung KHONG thay trong file:', thieu.join(', '));
-    if (la.length)    log('ℹ️  file con chua PO cua lo truoc:', la.join(', '));
+    const tatCaPo = files.flatMap(f => f.pos);
+    const la = tatCaPo.filter(p => !ok.includes(p));
+    if (la.length) log('ℹ️  file con chua PO cua lo truoc:', la.join(', '));
+    if (thieu.length) {
+      process.exitCode = 8;
+      console.error(
+        `\n⚠️  ${thieu.length} PO DA SUBMIT nhung slip KHONG xuat hien sau ${Math.round(doiMs / 1000)}s:\n` +
+        `   ${thieu.join(', ')}\n` +
+        `   Submit da gui roi, KHONG hoan tac duoc. Cac PO nay se KHONG vao manifest,\n` +
+        `   nen lan chay sau se SUBMIT LAI chung -> lenh reprint TRUNG.\n` +
+        `   -> Kiem tay danh sach reprint tren DSM truoc khi chay lai.\n`);
+    }
 
-    // --- 4. tai MOT file cho ca lo
-    const buf = await D.downloadPdf(req, pf.fid);
-    const local = path.join(OUTDIR, `${pf.fid}.pdf`);
-    await fs.writeFile(local, buf);
-    log(`tai ve: ${local} — ${Math.round(buf.length / 1024)} KB`);
+    // --- 4-6. tung file: tai -> _INBOX -> manifest
+    let soFileXong = 0;
+    for (const f of files) {
+      const buf = await D.downloadPdf(req, f.fid);
+      const local = path.join(OUTDIR, `${f.fid}.pdf`);
+      await fs.writeFile(local, buf);
+      log(`tai ve: ${local} — ${Math.round(buf.length / 1024)} KB`);
 
-    // --- 5. luu ban tho len Drive _INBOX
-    const up = await D.uploadToInbox(req, `${pf.fid}.pdf`, buf);
-    log(up.ok ? `✅ len Drive _INBOX (${up.ghiChu})` : `❌ khong len duoc Drive (${up.ghiChu})`);
-    if (!up.ok) process.exitCode = 6;
+      const up = await D.uploadToInbox(req, `${f.fid}.pdf`, buf);
+      log(up.ok ? `✅ len Drive _INBOX (${up.ghiChu})` : `❌ khong len duoc Drive (${up.ghiChu})`);
+      if (!up.ok) { process.exitCode = 6; log('bo qua manifest vi PDF chua len duoc Drive'); continue; }
+
+      // manifest CHI ghi khi PDF da len Drive. Thu tu nay KHONG duoc dao:
+      // manifest co ma PDF chua len = lan sau bo qua nhung PO do -> MAT DON.
+      const mf = await D.writeManifest(req, f.fid, f.pos, { soSlip: f.soSlip });
+      if (mf.ok) {
+        soFileXong++;
+        log(`✅ manifest ${f.fid}_manifest.json (${mf.ghiChu}) — ${f.pos.length} PO da chot`);
+      } else {
+        process.exitCode = 7;
+        console.error(
+          `\n⚠️  KHONG ghi duoc manifest cho ${f.fid} (${mf.ghiChu}).\n` +
+          `   File PDF DA len Drive, nhung dedup se KHONG thay lo nay.\n` +
+          `   -> CHAY LAI run.mjs luc nay se SUBMIT TRUNG cac PO: ${f.pos.join(', ')}\n` +
+          `   Cach xu ly: tach file thanh <PO>_PackingSlip.pdf nhu thuong le, hoac tu tay\n` +
+          `   tao ${f.fid}_manifest.json trong _INBOX voi noi dung {"fid":"${f.fid}","pos":[...]}\n`);
+      }
+    }
 
     // --- tong ket
     log('---');
     log(`submit OK ${ok.length}/${pos.length}` + (fail.length ? ` | loi ${fail.length}` : ''));
     for (const f of fail) log('   loi', f.po, '-', f.ly_do);
-    log(`file: ${pf.fid}.pdf | PO trong file: ${pf.pos.length}`);
+    log(`file xong ${soFileXong}/${files.length} | PO co slip: ${tatCaPo.length}` +
+        (thieu.length ? ` | ⚠️ THIEU ${thieu.length}: ${thieu.join(', ')}` : ''));
   } finally {
     await ctx.close();
     await browser.close();
