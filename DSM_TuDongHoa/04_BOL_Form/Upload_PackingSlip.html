@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Upload PackingSlip → Drive</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 560px; margin: 30px auto; color:#111; }
+  h2 { color:#C00000; }
+  label { font-weight:bold; display:block; margin:14px 0 4px; }
+  input[type=text], input[type=file] { width:100%; padding:8px; font-size:14px; box-sizing:border-box; }
+  button { margin-top:18px; background:#C00000; color:#fff; border:none; padding:10px 20px; font-size:15px; border-radius:4px; cursor:pointer; font-weight:bold; }
+  #status { margin-top:18px; padding:10px; font-size:15px; border-radius:4px; min-height:22px; white-space:pre-wrap; }
+  .ok { background:#e6f5e6; color:#1a7f1a; }
+  .err{ background:#fdeaea; color:#c00; }
+  .wait{ background:#fff7cc; color:#8a6d00; }
+  .hint { color:#666; font-size:12px; }
+</style>
+</head>
+<body>
+  <h2>Upload PackingSlip → Drive</h2>
+  <p class="hint">Đặt file thành <b>&lt;PO&gt;_PackingSlip.pdf</b> trong folder Drive dùng chung. Base64 xử lý ngay trong trình duyệt (không qua Claude).</p>
+
+  <label>PO number</label>
+  <input type="text" id="po" placeholder="vd: 25588834">
+
+  <label>Chọn file packing slip (PDF)</label>
+  <input type="file" id="fileInput" accept="application/pdf">
+
+  <button id="sendBtn" onclick="sendFile()">⬆ Gửi lên Drive</button>
+  <div id="status"></div>
+
+<script>
+  // ===== Hằng số (khớp NhanFile_Drive_WebApp.gs) =====
+  var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzzJCEgWBcO76OcbhJIdiHGlJEgbWxq7FFEGbIwwpQe2gmtOalVOXziJXFyuI1Ckrtn-Q/exec';
+  var FOLDER_ID  = '1ER7RWu-66baF1uvB4AuBByN7OS-FJdAI';
+
+  // Cho phép tự điền PO qua URL: ...Upload_PackingSlip.html?po=25588834
+  (function(){
+    var p = new URLSearchParams(location.search);
+    if (p.get('po')) document.getElementById('po').value = p.get('po');
+  })();
+
+  function setStatus(cls, msg){
+    var s = document.getElementById('status');
+    s.className = cls; s.textContent = msg;
+  }
+
+  function sendFile(){
+    var po = document.getElementById('po').value.trim();
+    var f  = document.getElementById('fileInput').files[0];
+    if (!po){ setStatus('err','❌ Chưa nhập PO.'); return; }
+    if (!f){  setStatus('err','❌ Chưa chọn file.'); return; }
+
+    setStatus('wait','⏳ Đang đọc file & gửi...');
+    var reader = new FileReader();
+    reader.onload = function(){
+      var b64 = String(reader.result).split(',')[1];   // bỏ tiền tố data:...;base64,
+      var body = {
+        folderId: FOLDER_ID,
+        filename: po + '_PackingSlip.pdf',
+        base64:   b64,
+        mimeType: 'application/pdf'
+      };
+      // text/plain = "simple request" -> không preflight (giống luồng AACT)
+      fetch(WEBAPP_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify(body)
+      })
+      .then(function(r){ return r.text(); })
+      .then(function(t){ setStatus('ok','✅ Đã gửi: ' + body.filename + '\n' + t); })
+      .catch(function(){ setStatus('ok','✅ Đã gửi (fire-and-forget): ' + body.filename + '\nKiểm tra lại trên Drive.'); });
+    };
+    reader.onerror = function(){ setStatus('err','❌ Lỗi đọc file.'); };
+    reader.readAsDataURL(f);
+  }
+</script>
+</body>
+</html>

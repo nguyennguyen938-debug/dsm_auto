@@ -1,0 +1,17 @@
+{
+  "name": "dsm-packingslip-tool",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Tai packing slip tu CommerceHub DSM (Rithum OrderStream) va luu vao Google Drive _INBOX",
+  "scripts": {
+    "login": "node login.mjs",
+    "dry": "node run.mjs --dry",
+    "start": "node run.mjs",
+    "daily": "node run.mjs --dedup"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}
