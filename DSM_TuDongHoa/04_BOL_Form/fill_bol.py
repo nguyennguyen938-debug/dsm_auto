@@ -43,8 +43,37 @@ JSON fields:
 """
 import sys, re, json, os, csv
 
-PALLET_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          '..', '05_TraCuu', 'pallet.csv')
+_HERE = os.path.dirname(os.path.abspath(__file__))
+PALLET_CSV = os.path.join(_HERE, '..', '05_TraCuu', 'pallet.csv')
+CARRIER_NAME_CSV = os.path.join(_HERE, '..', '05_TraCuu', 'carrier_name.csv')
+
+
+# ------------------------------------------------- carrier_name.csv (31/07/2026)
+def load_carrier_names(path=CARRIER_NAME_CSV):
+    """'AACT' -> 'AAA Cooper Transportation'."""
+    d = {}
+    with open(path, encoding='utf-8-sig') as fh:
+        for r in csv.reader(fh):
+            if len(r) >= 2 and r[0].strip() and r[0].strip().upper() != 'CARRIER CODE':
+                d[r[0].strip().upper()] = r[1].strip()
+    return d
+
+
+def parse_shipto(s):
+    """Tách Ship To thành (Name, Location) theo quy tắc chốt 31/07/2026.
+
+    Store  : 'Scott Doering C/O THD Ship to Store #0475'
+             -> ('To The Care of Scott Doering', 'THD Store 0475')
+    Khách  : 'Ali Tanveer'  ->  ('Ali Tanveer', '')
+    """
+    m = re.search(r'\bC\s*/\s*O\b', s, re.I)
+    if not m:
+        return s.strip(), ''
+    name = s[:m.start()].strip(' ,-')
+    rest = s[m.end():].strip(' ,-')
+    num = re.search(r'#\s*(\w+)', rest)
+    loc = 'THD Store %s' % num.group(1) if num else rest
+    return 'To The Care of %s' % name, loc
 
 
 # ---------------------------------------------------------------- pallet.csv
@@ -101,9 +130,11 @@ def build(tpl, v):
     def fta(s, tag, val):
         return s.replace(tag, tag.replace('></textarea>', '>%s</textarea>' % val), 1)
 
-    h = f1(h, '<input class="red fill" type="text" style="width:60%">', v['carrier'])
+    h = f1(h, '<input class="red fill" type="text" style="width:60%">', v['carrier_name'])
     h = f1(h, '<input class="red fill" type="text" style="width:64%">', v['po'])
+    h = f1(h, '<input class="red fill" type="text" style="width:52%">', v['carrier'])   # SCAC
     h = f1(h, '<input class="red fill" type="text" style="width:85%">', v['ship_name'])
+    h = f1(h, '<input class="red fill" type="text" style="width:80%">', v['location'])
     h = f1(h, '<input class="red fill" type="text" style="width:82%">', v['ship_address'])
     h = f1(h, '<input class="red fill" type="text" style="width:75%">', v['ship_csz'])
     h = f1(h, '<input class="fill" type="text" style="border-bottom:1px solid #000">', v['po'])
@@ -160,12 +191,26 @@ def main():
     if 'item_lines' not in v or 'weight' not in v or 'pieces' not in v:
         raise SystemExit('Thieu "items" (hoac item_lines/weight/pieces)')
 
+    # Ship To -> Name + Location (store thi 'To The Care of ...' + 'THD Store NNNN')
+    if 'location' not in v:
+        v['ship_name'], v['location'] = parse_shipto(v['ship_name'])
+    # CARRIER NAME = ten day du; SCAC = ma carrier
+    if 'carrier_name' not in v:
+        names = load_carrier_names()
+        code = v['carrier'].strip().upper()
+        if code not in names:
+            raise SystemExit('Carrier %s KHONG CO trong carrier_name.csv' % code)
+        v['carrier_name'] = names[code]
+
     tpl = open(tpl_path, encoding='utf-8').read()
     html = to_static(build(tpl, v))
     import weasyprint
     out = os.path.join(out_dir, '%s_BOL.pdf' % v['po'])
     weasyprint.HTML(string=html, base_url='.').write_pdf(out)
     print('OK ->', out, os.path.getsize(out), 'bytes')
+    print('   CARRIER NAME = %s   |   SCAC = %s' % (v['carrier_name'], v['carrier']))
+    print('   Ship To Name = %s' % v['ship_name'])
+    print('   Location     = %s' % (v['location'] or '(trong - khach le)'))
     print('   weight=%s  pieces=%s' % (v['weight'], v['pieces']))
     for l in v['item_lines']:
         print('   ' + l)

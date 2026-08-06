@@ -150,6 +150,41 @@ nằm trong file** (lấy từ `pendingFiles`, không lấy danh sách đã subm
 
 Ô cuối cùng là lý do thứ tự này cố định trong code, đừng "tối ưu" lại.
 
+## Nhánh KHÔNG cần web — `xu-ly-don.mjs` (thêm 06/08/2026)
+
+Nối tiếp `run.mjs`. Chỉ làm **SEFL · XGSI · BXID · FXFE · ABFS**; AACT/CTII phải điền trên web
+carrier nên script này bỏ qua, để dành nhánh riêng.
+
+```bash
+node xu-ly-don.mjs --dry     # chỉ liệt kê, KHÔNG ghi gì — chạy cái này TRƯỚC
+node xu-ly-don.mjs           # chạy thật
+node xu-ly-don.mjs --only 48559271
+```
+
+```
+slip trên đĩa -> lookup sheet -> lọc -> đọc slip -> chọn carrier -> tính BOL
+   -> bol_html.py -> makeFolder -> upload BOL + slip -> fillRow
+```
+
+**Bốn tầng lọc**, đơn nào không qua thì dừng, không đoán:
+
+| Điều kiện | Xử lý |
+|---|---|
+| Cột C có carrier **hoặc** cột D có PIC | bỏ qua — có người làm tay, làm nữa = BOL trùng |
+| Ship Via = Ground | bỏ qua — dừng ở mức có slip trên Drive |
+| Carrier ra AACT/CTII | bỏ qua — cần web carrier |
+| Đọc slip lỗi · bang AK/HI · SKU lạ · nhiều SKU | **danh sách chờ người xem**, không tự xử |
+
+Cột C/D được kiểm **lại** ở đây dù `needSlip` đã lọc, vì PIC có thể được điền **sau** khi slip đã tải.
+
+`makeFolder` chốt ngày trước rồi `fillRow` dùng lại đúng ngày đó với `skipCap:true` — thứ tự này
+không được đảo, xem `CLAUDE.md` mục 4.
+
+**Không tạo lệnh pickup, không đụng web carrier.** Sai thì sửa được: xoá file, sửa dòng sheet.
+
+`bol_html.py` chỉ xuất HTML rồi để web app dựng PDF — WeasyPrint cần pango/cairo mà VM không có.
+Mọi luật điền vẫn nằm ở `fill_bol.py`, file kia không lặp lại luật nào.
+
 ## Mã thoát
 
 | Mã | Nghĩa |

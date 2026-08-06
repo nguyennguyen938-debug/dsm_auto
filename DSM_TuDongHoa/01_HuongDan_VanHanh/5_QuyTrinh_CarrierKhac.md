@@ -117,8 +117,12 @@ POST từ tab `example.com`: `{folderId:'<folderId vừa tạo>', filename:'<PO>
 
 ## BƯỚC 3 — Điền Sheet qua WEB APP (`fillRow`) — sheet **"Order List"**
 POST cho web app (từ tab `example.com`):
+> 🔴 **Sửa 05/08/2026 — ví dụ dưới đây trước có `headers:{'Content-Type':'text/plain'}`. BỎ ĐI.**
+> Chính header đó làm lỗi `{"ok":true,"msg":"Receiver alive"}` xảy ra **liên tục** — mâu thuẫn với
+> đúng cảnh báo ở cuối file này. Mục "CHẠY NHIỀU ĐƠN" bên dưới nói đúng, đoạn code này thì chưa sửa.
+
 ```js
-fetch(WEBAPP_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+fetch(WEBAPP_URL, { method:'POST',
   body: JSON.stringify({ action:'fillRow',
     po:'<PO>', carrier:'<MÃ>', customerOrder:'<Customer Order #>', shipTo:'<Tên>',
     sku:'<Model Number nguyên, vd 832250-B>', productName:'<Item Description>', qty:'<Qty Shipped>',

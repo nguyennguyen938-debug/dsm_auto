@@ -66,6 +66,19 @@ function giaTriTrongBang(items, lb) {
   return ds.sort((a, b) => Math.abs(a.y - lb.y) - Math.abs(b.y - lb.y))[0].s;
 }
 
+/**
+ * Giá trị NHIỀU MẨU trong bảng — dùng cho Item Description khi bị ngắt dòng:
+ *   y=192 x=312 "Unfinished Hevea Butcher Block"
+ *   y=192 x=324 "Countertop - 10ft x 25in x 1.5in"
+ * Gộp mọi mẩu cùng y (±3) trong cột giá trị, xếp theo x.
+ */
+function nhieuManhTrongBang(items, lb) {
+  const gan = items.filter(i => i.x > lb.x + 5 && i.x < lb.x + 30);
+  if (!gan.length) return null;
+  const yGoc = gan.sort((a, b) => Math.abs(a.y - lb.y) - Math.abs(b.y - lb.y))[0].y;
+  return gan.filter(i => Math.abs(i.y - yGoc) <= 3).sort((a, b) => a.x - b.x).map(i => i.s).join(' ');
+}
+
 export async function docSlip(duongDan) {
   const items = await docItems(duongDan);
 
@@ -144,10 +157,21 @@ export async function docSlip(duongDan) {
   const qty = parseInt(qtyStr, 10);
   if (!Number.isInteger(qty) || qty < 1) throw new Error(`Qty Shipped "${qtyStr}" khong hop le`);
 
+  // Item Description — cột H của sheet lấy chuỗi NÀY (mô tả trên slip),
+  // KHÔNG phải mô tả trong pallet.csv. Hai chuỗi khác nhau; lấy nhầm là sheet
+  // ghi tên hàng không khớp giấy tờ gửi khách.
+  // Nhãn xuất hiện 2 lần (phần trả hàng + phần slip) -> lấy bản DÀI hơn, vì
+  // bản trong phần trả hàng thường bị cắt ngắn.
+  const moTaHang = items.filter(i => i.s === 'Item Description')
+    .map(lb => nhieuManhTrongBang(items, lb))
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)[0] || null;
+  if (!moTaHang) throw new Error('khong doc duoc Item Description');
+
   return {
     po, customerOrder, ngay, shipVia, loai, addressType, orderedBy,
     shipTo: { ten, co, laStore, diaChi, city, bang, zip, phone },
-    items: [{ model: modelDuyNhat[0], qty }]
+    items: [{ model: modelDuyNhat[0], qty, moTa: moTaHang }]
   };
 }
 
