@@ -1,10 +1,17 @@
 /**
  * ============================================================================
- *  aact.mjs — đăng nhập aaacooper.com và TẢI file của BOL ĐÃ CÓ
+ *  aact.mjs — đăng nhập aaacooper.com, TẠO BOL và TẢI file
  * ----------------------------------------------------------------------------
- *  ⛔ File này KHÔNG tạo BOL. Không có hàm nào bấm Finalize.
- *     Tạo BOL trên AACT sinh ra BOL# và PRO# THẬT; tạo lại một đơn đã có =
- *     BOL rác + PRO rác (xem 3_QuyTrinh_AACT.md). Chỉ tải file của BOL đã tồn tại.
+ *  Hai nhóm hàm, mức rủi ro KHÁC HẲN nhau:
+ *
+ *   AN TOÀN — chỉ đọc:   dangNhap · taiTuViewer · taiShippingLabel · taiBolVaLabel
+ *      Tải file của BOL ĐÃ CÓ. Không tạo gì.
+ *
+ *   ⛔ KHÔNG HOÀN TÁC:   taoBOL(..., { finalize: true })
+ *      Finalize sinh ra BOL# và PRO# THẬT. Tạo lại một đơn đã có = BOL rác +
+ *      PRO rác (xem 3_QuyTrinh_AACT.md). AACT KHÔNG đặt lịch pickup — nhẹ hơn
+ *      CTII — nhưng số vẫn là số thật và vào sheet.
+ *      `finalize` mặc định **false**: điền xong thì DỪNG để người xem.
  *
  *  Đăng nhập: form ASP.NET thuần (user + password), không SSO, không MFA,
  *  không CAPTCHA — khảo sát 05/08/2026. Khác hẳn DSM nên tự động hoá được.
@@ -210,4 +217,113 @@ export async function taiBolVaLabel(page, bolNumber) {
     bol: await taiTuViewer(page, urlBolPdf(bolNumber)),
     lbl: await taiShippingLabel(page, bolNumber)
   };
+}
+
+/* ============================================================================
+ *  TẠO BOL — ⛔ THAO TÁC KHÔNG HOÀN TÁC ĐƯỢC
+ * ----------------------------------------------------------------------------
+ *  Finalize sinh ra **BOL# và PRO# THẬT**. Tạo lại một đơn đã có = BOL rác + PRO rác
+ *  (AACT không đặt lịch pickup — xem quy tắc #2 — nhưng số vẫn là số thật).
+ *  Vì vậy `finalize` mặc định **false**: hàm điền xong rồi DỪNG, trả ảnh chụp để
+ *  người xem. Chỉ truyền `finalize:true` khi thật sự muốn tạo.
+ *
+ *  KHẢO SÁT 06/08/2026 — ba bẫy:
+ *   1. ID mặt hàng có **hậu tố GUID đổi mỗi phiên** (`Weight_bb09a55b-…`).
+ *      Phải chọn theo TIỀN TỐ `[id^="Weight_"]`, không hard-code được.
+ *   2. `IsHazmat_*` **mặc định ĐANG TÍCH** → phải chủ động BỎ tích
+ *      (tài liệu ghi "Shipment contains: bỏ tích" — dễ đọc nhầm thành "để nguyên").
+ *   3. `Name_ShipmentPartyConsignee` xuất hiện **2 lần** (Company Name và Contact).
+ *      nth(0) = Company, nth(1) = Contact. getElementById chỉ thấy cái đầu.
+ *   4. Nhập zip **KHÔNG tự điền** city/state như tài liệu mô tả (thử 06/08: vẫn rỗng)
+ *      → phải điền tay cả ba.
+ * ==========================================================================*/
+
+export const URL_BOL_MOI = 'https://www.aaacooper.com/workspace/bol?sourceBolTemplateId=50357';
+
+/**
+ * @param dl {po, customerOrder, consignee:{ten,diaChi,city,bang,zip,phone}, tinh:{qty,weight,cls}, moTa}
+ * @param finalize false = điền xong rồi DỪNG (mặc định). true = bấm Finalize THẬT.
+ */
+export async function taoBOL(page, dl, { finalize = false, anh = null } = {}) {
+  const nk = [];
+  const ghi = (b, v) => nk.push(`${b}: ${v}`);
+
+  await page.goto(URL_BOL_MOI, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.waitForTimeout(18000);                    // Blazor WASM nạp chậm
+
+  // ---- Trang 1: Consignee. Shipper/Bill-to đã có sẵn trong template 50357 ----
+  const dat = async (sel, val, i = 0) => {
+    const l = page.locator(sel).nth(i);
+    if (!await l.count()) throw new Error(`khong thay ${sel} #${i}`);
+    await l.fill(String(val ?? ''));
+    await page.waitForTimeout(400);
+  };
+  // store thì Company Name gồm CẢ dòng C/O (tài liệu bước 3, trang 1)
+  const tenCty = dl.consignee.co ? `${dl.consignee.ten} ${dl.consignee.co}` : dl.consignee.ten;
+  await dat('#Name_ShipmentPartyConsignee', tenCty, 0);
+  await dat('#StreetAddress_ShipmentPartyConsignee', dl.consignee.diaChi, 0);
+  await dat('#zip_Location_ShipmentPartyConsignee', dl.consignee.zip, 0);
+  await page.waitForTimeout(2500);
+  // zip KHÔNG tự điền city/state -> điền tay
+  await dat('#city_Location_ShipmentPartyConsignee', dl.consignee.city, 0);
+  await dat('#state_Location_ShipmentPartyConsignee', dl.consignee.bang, 0);
+  if (dl.consignee.phone) await dat('#Phone_ShipmentPartyConsignee', dl.consignee.phone, 0);
+  ghi('trang 1', `${tenCty} | ${dl.consignee.city}, ${dl.consignee.bang} ${dl.consignee.zip}`);
+
+  await page.locator('button:has-text("Next")').first().click();
+  await page.waitForTimeout(12000);
+
+  // ---- Trang 2: COMMODITY #1 + Reference Numbers ---------------------------
+  const datTien = async (tienTo, val) => {
+    const l = page.locator(`[id^="${tienTo}"]`).first();
+    if (!await l.count()) throw new Error(`khong thay o [id^="${tienTo}"]`);
+    await l.fill(String(val));
+    await page.waitForTimeout(400);
+  };
+  await datTien('HandlingUnitsCount_', dl.tinh.qty);
+  await datTien('Weight_', dl.tinh.weight);
+  await datTien('Description_', dl.moTa);
+  await datTien('Class_', dl.tinh.cls);
+
+  // IsHazmat mặc định ĐANG TÍCH -> bỏ tích
+  const haz = page.locator('[id^="IsHazmat_"]').first();
+  if (await haz.count() && await haz.isChecked()) { await haz.uncheck(); await page.waitForTimeout(500); }
+  ghi('hazmat', await haz.count() ? (await haz.isChecked() ? 'VAN TICH ⚠️' : 'da bo tich') : 'khong thay o');
+
+  await dat('#SpecialInstructions', `PO Number ${dl.po}`);
+  await dat('#fvcAmount', '200');
+
+  const pro = page.locator('#generate-pro-number');
+  if (await pro.count() && !await pro.isChecked()) { await pro.check(); await page.waitForTimeout(500); }
+  ghi('generate PRO', await pro.count() ? (await pro.isChecked() ? 'da tich' : 'CHUA TICH ⚠️') : 'khong thay o');
+
+  await dat('#customer-bol-number', dl.po);              // Shipper BOL #
+  await dat('#shipper-reference-number-0', dl.po);       // Shipper Reference #1
+  await dat('#purchase-order-number-0', dl.customerOrder); // Consignee Reference (PO) #1
+  ghi('trang 2', `${dl.tinh.qty} unit | ${dl.tinh.weight} lb | class ${dl.tinh.cls}`);
+
+  if (anh) await page.screenshot({ path: anh, fullPage: true });
+
+  if (!finalize) {
+    ghi('FINALIZE', 'BO QUA — dien xong roi dung (finalize=false)');
+    return { ok: true, daTao: false, nhatKy: nk };
+  }
+
+  // ---- ⛔ ĐIỂM KHÔNG QUAY LẠI ĐƯỢC ----------------------------------------
+  await page.locator('button:has-text("Finalize Bill of Lading")').first().click();
+  await page.waitForTimeout(15000);
+
+  const so = await page.evaluate(() => {
+    const t = (document.body.innerText || '').replace(/\s+/g, ' ');
+    return { bol: (t.match(/BOL\s*#?\s*:?\s*(\d{6,9})/i) || [])[1] || null,
+             pro: (t.match(/PRO\s*(?:Number)?\s*#?\s*:?\s*(\d{7,10})/i) || [])[1] || null,
+             url: location.href.slice(0, 100) };
+  });
+  ghi('FINALIZE', `BOL#=${so.bol} PRO#=${so.pro}`);
+  // Trang /workspace/bol/<id> chết sau khi rời đi (lỗi #16) -> mất số là mất luôn
+  if (!so.bol || !so.pro) {
+    return { ok: false, daTao: true, nhatKy: nk,
+             ly_do: 'DA FINALIZE nhung KHONG doc duoc BOL#/PRO# — LAY TAY NGAY, trang se chet' };
+  }
+  return { ok: true, daTao: true, bolNumber: so.bol, pro: so.pro, nhatKy: nk };
 }
