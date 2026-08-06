@@ -114,6 +114,23 @@ một file tách bị nghi gán nhầm PO, mà lấy lại từ DSM đồng ngh�
 `donDepManifest` xoá nó sau, cùng lúc và cùng điều kiện với manifest (mọi PO trong lô đã có file
 tách). Sau đó bản gốc **chỉ còn trên đĩa VM** ở `../11_TaiVe/dsm_raw/`, không được sao lưu.
 
+### Dọn `_INBOX` (thêm 06/08/2026)
+
+`donDepManifest` dọn **ba** thứ, mỗi thứ một cổng riêng:
+
+| Thứ | Xoá khi |
+|---|---|
+| `<fid>_manifest.json` | mọi PO trong lô đã có file tách |
+| `<fid>.pdf` (gộp) | cùng điều kiện trên |
+| `<PO>_PackingSlip.pdf` | đã có bản trong folder `PO - <po>` |
+
+Cái thứ ba dùng `_coSlipTrongFolderPO_()` — **KHÔNG** dùng `_coFilePackingSlip_()`. Hàm sau nhận cả
+`_INBOX` nên nó sẽ tự thoả mãn bằng chính file sắp xoá, xoá ngay và dedup mất dấu. Hai hàm cố ý
+khác nhau đúng ở chỗ đó.
+
+**Đơn Ground luôn được giữ** — chúng không bao giờ có folder `PO - <po>` (chốt: dừng ở mức có slip
+trên Drive), nên `_INBOX` sẽ luôn tích tụ slip Ground. Đó là chủ ý.
+
 ⚠️ Xoá manifest sớm bằng tay sẽ khiến `<fid>.pdf` **mồ côi** — không còn manifest nào trỏ tới nó
 nên `donDepManifest` sẽ không bao giờ dọn. Lúc đó phải xoá tay.
 

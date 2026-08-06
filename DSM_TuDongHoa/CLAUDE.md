@@ -92,7 +92,7 @@ Dấu hiệu người làm tay: `x` **viết thường** ở cột J/M (script l
 |---|---|---|
 | `needSlip` | **GET** `?action=needSlip[&checkSlip=1]` hoặc POST | `o.pos` |
 | `lookup` | **GET** `?action=lookup&pos=a,b` hoặc POST `{pos:[...]}` | `o.rows` |
-| `donDepManifest` | **GET** `?action=donDepManifest[&thatSu=1]` — dọn manifest + file gộp đã hết việc | `o.xoa` |
+| `donDepManifest` | **GET** `?action=donDepManifest[&thatSu=1]` — dọn `_INBOX`: manifest + file gộp + slip đã vào folder PO | `o.xoa` |
 | `makeFolder` | POST `{action:'makeFolder', po, pickupSchedule}` | `o.folderId` |
 | `fillRow` | POST `{action:'fillRow', po, carrier, ..., skipCap:true}` | `o.row` |
 | upload file | POST `{folderId, filename, base64, mimeType}` | `o.id` |

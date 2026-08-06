@@ -501,7 +501,7 @@ function _poDaLaySlip_() {
  * ⚠️ Hàm này là điều kiện dùng CHUNG cho dedup (_needSlip) và cho việc xoá manifest
  *    (_donDepManifest). Sửa nó là sửa cả hai — đó là chủ ý, đừng tách ra làm hai bản.
  */
-function _coFilePackingSlip_(po) {
+function _timSlip_(po, nhanInbox) {
   var it = DriveApp.getFilesByName(po + '_PackingSlip.pdf');
   while (it.hasNext()) {
     var f = it.next();
@@ -509,18 +509,31 @@ function _coFilePackingSlip_(po) {
     var ps = f.getParents();
     while (ps.hasNext()) {
       var cha = ps.next();
-      if (cha.getId() === INBOX_FOLDER_ID) return true;             // (a)
+      if (cha.getId() === INBOX_FOLDER_ID) { if (nhanInbox) return true; continue; }   // (a)
       // .trim(): thực tế có folder "PO - 02562579 " dính dấu cách thừa.
       // _poKey: folder cũ có thể mất số 0 đầu ("PO - 2562579") — vẫn phải khớp.
-      var m = cha.getName().trim().match(/^PO\s*-\s*(\d+)$/);        // (b)
+      var m = cha.getName().trim().match(/^PO\s*-\s*(\d+)$/);                          // (b)
       if (m && _poKey(m[1]) === po) return true;
     }
   }
   return false;
 }
 
+/** Dedup: nhận cả hai vị trí. */
+function _coFilePackingSlip_(po) { return _timSlip_(po, true); }
+
+/**
+ * CHẶT HƠN: chỉ tính file nằm trong folder `PO - <po>`, KHÔNG tính `_INBOX`.
+ *
+ * 🔴 Dùng làm cổng XOÁ file khỏi `_INBOX`. TUYỆT ĐỐI không dùng `_coFilePackingSlip_`
+ *    cho việc đó: hàm kia nhận cả `_INBOX`, nên nó sẽ tự thoả mãn bằng CHÍNH file
+ *    sắp bị xoá — xoá ngay lập tức, và dedup mất luôn dấu của PO đó.
+ *    Hai hàm cố ý khác nhau đúng ở chỗ này; đừng gộp lại.
+ */
+function _coSlipTrongFolderPO_(po) { return _timSlip_(po, false); }
+
 /* ============================================================================
- *  G) donDepManifest — XOÁ MANIFEST **VÀ FILE GỘP** ĐÃ HẾT VIỆC
+ *  G) donDepManifest — DỌN _INBOX: manifest, file gộp, VÀ slip đã vào folder PO
  * ----------------------------------------------------------------------------
  *  Manifest chỉ là dấu TẠM, lấp khoảng trống từ lúc tải file gộp tới lúc tách
  *  xong thành <PO>_PackingSlip.pdf. Tách xong rồi thì nó là rác.
@@ -533,6 +546,10 @@ function _coFilePackingSlip_(po) {
  *     Đừng viết lại logic tương đương, hai bên sẽ lệch nhau khi có người sửa.
  *
  *  Chỉ xoá khi MỌI PO trong manifest đều đã có file. Thiếu một PO -> giữ nguyên.
+ *
+ *  Dọn BA thứ, mỗi thứ một cổng điều kiện riêng:
+ *    1+2. `<fid>_manifest.json` + `<fid>.pdf` — khi MỌI PO trong lô đã có file tách
+ *    3.   `<PO>_PackingSlip.pdf` — khi đã có bản trong folder `PO - <po>`
  *
  *  Đủ điều kiện thì xoá CẢ HAI: `<fid>_manifest.json` và `<fid>.pdf` (file gộp).
  *  File gộp chỉ là nguyên liệu để tách; tách xong thì không ai dùng tới nữa.
@@ -598,10 +615,38 @@ function _donDepManifest(body) {
     if (thatSu) f.setTrashed(true);
   }
 
+  /* --- Vế 2: <PO>_PackingSlip.pdf trong _INBOX đã được dọn vào folder PO chưa --------
+   * run.mjs tách slip vào _INBOX; xu-ly-don.mjs sau đó tải BẢN THỨ HAI vào
+   * 'PO - <po>' (tải lên, không phải chuyển). Bản ở _INBOX hết việc khi bản kia có.
+   *
+   * ⚠️ Cổng xoá là _coSlipTrongFolderPO_ (CHỈ folder PO), KHÔNG phải
+   *    _coFilePackingSlip_ (nhận cả _INBOX) — nếu không nó tự thoả mãn bằng chính
+   *    file sắp xoá.
+   * ⚠️ Đơn GROUND không bao giờ có folder 'PO - <po>' (người dùng chốt: dừng ở mức
+   *    có slip trên Drive) -> luôn rơi vào nhánh GIỮ. Đó là chủ ý, không phải sót.
+   */
+  var xoaSlip = [], giuSlip = [];
+  var it2 = inbox.getFiles();
+  while (it2.hasNext()) {
+    var fs = it2.next();
+    if (fs.isTrashed()) continue;
+    var mSlip = fs.getName().match(/^(\d{8})_PackingSlip\.pdf$/);
+    if (!mSlip) continue;
+    var poS = _poKey(mSlip[1]);
+    if (_coSlipTrongFolderPO_(poS)) {
+      xoaSlip.push(poS);
+      if (thatSu) fs.setTrashed(true);
+    } else {
+      giuSlip.push(poS);       // chưa dựng BOL, hoặc là đơn Ground
+    }
+  }
+
   return _json({
     ok: true, thatSu: thatSu,
     daXoa: thatSu ? xoa.length : 0, seXoa: thatSu ? 0 : xoa.length,
-    xoa: xoa, giu: giu, loi: loi
+    xoa: xoa, giu: giu, loi: loi,
+    slipDaVaoFolderPO: xoaSlip,          // đã/sẽ xoá khỏi _INBOX
+    slipConGiuOInbox: giuSlip            // chưa có bản trong 'PO - <po>' (Ground hoặc chưa làm)
   });
 }
 
