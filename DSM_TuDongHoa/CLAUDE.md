@@ -19,8 +19,12 @@ Claude Code đọc file này tự động. Đây là bản tóm tắt **đã ki�
    được phép làm.
 3. **Submit reprint trên DSM KHÔNG HOÀN TÁC ĐƯỢC.** Kiểm trùng trước; lỗi thì **không retry**.
 4. **Không nhập mật khẩu, không lưu mật khẩu.** Đăng nhập do người dùng tự làm.
-5. **PO luôn 8 chữ số, luôn ghi dạng TEXT** vào sheet (`setNumberFormat('@')` TRƯỚC `setValue`).
-   Nhiều PO bắt đầu bằng 0. Mất số 0 là lệch tên folder Drive, `fillRow` không tìm thấy hàng.
+5. **PO luôn 8 chữ số, luôn ghi dạng TEXT** vào sheet. Nhiều PO bắt đầu bằng 0; mất số 0 là lệch
+   tên folder Drive, `fillRow` không tìm thấy hàng.
+   🔴 **`setNumberFormat('@')` rồi `setValue` KHÔNG ĐỦ** (bằng chứng 06/08/2026: fillRow gửi chuỗi
+   `'08/07/2026'`, đọc lại ra kiểu **Date**, không ai sửa tay). Sheets vẫn ép kiểu vì định dạng chưa
+   kịp áp. Phải dùng `_ghiText_()`: áp định dạng → `flush()` → ghi → `flush()` → **đọc lại kiểm**,
+   còn ra Date thì ghi lại kèm dấu nháy đầu. Áp cho **cả cột B (PO) và cột K**.
 6. **Sửa web app Apps Script phải Deploy ▸ New version.** Trigger dùng code Head (Save là đủ),
    web app thì KHÔNG.
 7. Đơn **Ground** vẫn lưu Drive, **không lọc bỏ** (chốt 05/08/2026).

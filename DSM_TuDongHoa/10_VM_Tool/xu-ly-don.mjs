@@ -34,6 +34,13 @@ const TU_LAM = new Set(['SEFL', 'XGSI', 'BXID', 'FXFE', 'ABFS']);
 
 const argv = process.argv.slice(2);
 const DRY = argv.includes('--dry');
+/**
+ * ⛔ CHỈ DÙNG ĐỂ TEST. Vượt tầng lọc cột C/D — tức là làm lại đơn mà NGƯỜI KHÁC
+ *    ĐANG hoặc ĐÃ làm tay. Với nhóm carrier này thì không tạo lệnh pickup, nhưng
+ *    fillRow sẽ GHI ĐÈ dòng sheet đã có (rõ nhất là cột K mất mốc cũ).
+ *    Đừng bao giờ đặt cờ này trong cron.
+ */
+const BO_LOC = argv.includes('--test-bo-loc-cot-CD');
 const ONLY = (() => { const i = argv.indexOf('--only'); return i >= 0 ? (argv[i + 1] || '').split(',').filter(Boolean) : null; })();
 
 const log = (...a) => console.log(new Date().toLocaleTimeString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }), ...a);
@@ -80,8 +87,12 @@ async function main() {
     // Luật lọc: cột C có carrier hoặc cột D có PIC -> có người đang làm tay.
     // Làm nữa = BOL trùng. Kiểm LẠI ở đây dù needSlip đã lọc, vì PIC có thể
     // được điền SAU khi slip đã tải.
-    if ((r.carrier || '').trim()) { boQua.push({ po, ly_do: `cot C da co carrier ${r.carrier}` }); continue; }
-    if ((r.pic || '').trim()) { boQua.push({ po, ly_do: `cot D co PIC ${r.pic}` }); continue; }
+    if (!BO_LOC) {
+      if ((r.carrier || '').trim()) { boQua.push({ po, ly_do: `cot C da co carrier ${r.carrier}` }); continue; }
+      if ((r.pic || '').trim()) { boQua.push({ po, ly_do: `cot D co PIC ${r.pic}` }); continue; }
+    } else if ((r.carrier || '').trim() || (r.pic || '').trim()) {
+      log(`   ⛔ ${po}: VUOT LOC — cot C="${r.carrier || ''}" cot D="${r.pic || ''}" se bi GHI DE`);
+    }
 
     let d;
     try { d = await docSlip(path.join(SLIPDIR, `${po}_PackingSlip.pdf`)); }

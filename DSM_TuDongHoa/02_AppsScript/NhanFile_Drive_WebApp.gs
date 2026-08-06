@@ -174,8 +174,11 @@ function _fillRow(body) {
     }
     var row = found || (last < start ? start : last + 1);
     if (!found) {
-      // ⚠️ định dạng TEXT trước khi ghi, nếu không "08576180" sẽ thành số 8576180
-      sh.getRange(row, SHEET_CFG.COL_PO).setNumberFormat('@').setValue(po);
+      // ⚠️ PHẢI ở dạng TEXT, nếu không "08576180" thành số 8576180 (mất số 0 đầu).
+      // setNumberFormat + setValue KHÔNG đủ — xem _ghiText_().
+      if (!_ghiText_(sh.getRange(row, SHEET_CFG.COL_PO), po)) {
+        throw new Error('Khong ghi duoc PO ' + po + ' dang TEXT — dung lai, dung ghi tiep');
+      }
     }
 
     function set(c, v) { if (v != null && String(v).trim() !== '') sh.getRange(row, c).setValue(v); }
@@ -188,7 +191,7 @@ function _fillRow(body) {
     sh.getRange(row, SHEET_CFG.COL_BOLLABEL).setValue('X');                  // J mặc định X
 
     // K — áp TRẦN 15 ĐƠN/NGÀY: dời sang ngày làm việc kế nếu ngày mong muốn đã đầy
-    var pk = null;
+    var pk = null, kTextOk = null;
     if (body.pickupSchedule != null && String(body.pickupSchedule).trim() !== '') {
       var wantK = String(body.pickupSchedule).trim();
       // skipCap = true  -> GHI ĐÚNG ngày truyền vào, không áp trần nữa.
@@ -196,7 +199,7 @@ function _fillRow(body) {
       //   hoặc lịch pickup đã cam kết với carrier như CTII) — tránh sheet lệch với thực tế.
       pk = body.skipCap ? { date: wantK, moved: false }
                         : _resolvePickupDate(sh, wantK, row);
-      sh.getRange(row, SHEET_CFG.COL_PICKUP).setNumberFormat('@').setValue(pk.date);
+      kTextOk = _ghiText_(sh.getRange(row, SHEET_CFG.COL_PICKUP), pk.date);
     }
     set(SHEET_CFG.COL_PRO, body.pro);                                        // N (AACT gửi kèm)
     set(SHEET_CFG.COL_PICKUPNUM, body.pickupNum);                            // O (CTII)
@@ -206,7 +209,8 @@ function _fillRow(body) {
       ok: true, row: row, added: !found, po: po, carrier: carrier,
       pickupSchedule: pk ? pk.date : null,          // ngày THỰC SỰ đã ghi vào cột K
       pickupRequested: body.pickupSchedule || null, // ngày bên gọi đề nghị
-      pickupMoved: pk ? pk.moved : false            // true = đã bị dời vì ngày kia đủ 15
+      pickupMoved: pk ? pk.moved : false,           // true = đã bị dời vì ngày kia đủ 15
+      pickupLaText: kTextOk                         // false = cột K vẫn bị ép thành Date
     });
   } finally { lock.releaseLock(); }
 }
@@ -426,6 +430,39 @@ function _needSlip(body) {
  * Manifest hỏng thì BỎ QUA file đó, không ném lỗi: thà dedup sót (submit trùng — phiền)
  * còn hơn _needSlip chết hẳn (cả lô đứng).
  */
+/**
+ * Ghi một chuỗi vào ô và ĐẢM BẢO nó ở lại dạng TEXT.
+ *
+ * 🔴 BẰNG CHỨNG 06/08/2026 — `setNumberFormat('@').setValue(s)` KHÔNG ĐỦ.
+ * Chạy thật: fillRow gửi chuỗi '08/07/2026', code chạy đúng dòng đó, đọc lại ra
+ * `Fri Aug 07 2026 00:00:00 GMT+0700` — **kiểu Date**. Không có ai sửa tay.
+ * Sheets vẫn ép kiểu vì định dạng chưa kịp áp trước khi giá trị được ghi.
+ * Khớp với hiện tượng cũ "cùng đoạn code, dòng 250 ra text, 232/236/249/252 ra Date".
+ *
+ * Trước đây đã KẾT LUẬN SAI rằng đây là do người sửa tay — lý lẽ "code chỉ sinh ra
+ * chuỗi nên không thể ra Date" bỏ sót đúng chỗ này.
+ *
+ * Vì sao quan trọng ngoài cột K: cùng khuôn này dùng cho **cột B (PO)**. Định dạng
+ * chưa áp thì '08576180' thành số 8576180 — MẤT SỐ 0 ĐẦU, lệch tên folder Drive,
+ * fillRow không tìm thấy hàng. Đó chính là thứ FIX_poLeadingZero() phải đi chữa.
+ *
+ * Cách làm: áp định dạng -> flush -> ghi -> flush -> ĐỌC LẠI KIỂM. Còn ra Date thì
+ * ghi lại kèm dấu nháy đầu (Sheets hiểu là "ép text"). Tự kiểm rồi tự sửa, không
+ * tin suông vào setNumberFormat.
+ */
+function _ghiText_(o, giaTri) {
+  var s = String(giaTri);
+  o.setNumberFormat('@');
+  SpreadsheetApp.flush();
+  o.setValue(s);
+  SpreadsheetApp.flush();
+  if (o.getValue() instanceof Date) {
+    o.setValue("'" + s);
+    SpreadsheetApp.flush();
+  }
+  return !(o.getValue() instanceof Date);   // false = vẫn hỏng, bên gọi nên báo
+}
+
 function _poDaLaySlip_() {
   var out = {};
   try {
