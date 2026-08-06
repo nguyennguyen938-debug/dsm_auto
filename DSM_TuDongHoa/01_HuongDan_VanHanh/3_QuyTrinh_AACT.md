@@ -113,6 +113,29 @@ nút KHÔNG có chữ nên tìm theo text sẽ trượt. Bắt bằng sự kiệ
 tiên"** — trong cùng form còn ô tìm kiếm `placeholder="Enter City, State, Zip"` đứng TRƯỚC nó;
 lấy nhầm thì user rỗng, đăng nhập lặng lẽ hỏng và trang chỉ hiện lại chính nó.
 
+### ✅ TẠO BOL TỰ ĐỘNG ĐƯỢC — `aact.mjs` hàm `taoBOL()` (nghiệm thu 06/08/2026)
+
+Đã chạy Finalize THẬT một lần để nghiệm thu → **BOL# `4178975` · PRO# `39004838`**.
+⚠️ **Đây là BOL RÁC cố ý** (PO `00000000`, consignee `TEST - DO NOT SHIP`, giao về chính kho
+Calhoun). Người dùng duyệt tạo để kiểm chứng đường Finalize. **Đừng dùng, đừng xoá nhầm BOL thật.**
+
+`finalize` mặc định **false** — điền xong thì dừng và chụp ảnh. Chỉ truyền `true` khi thật sự tạo.
+
+**Bốn bẫy trên form, khảo sát 06/08:**
+
+| Bẫy | Hệ quả nếu bỏ qua |
+|---|---|
+| ID mặt hàng có **hậu tố GUID đổi mỗi phiên** (`Weight_bb09a55b-…`) | Hard-code ID là hỏng ngay phiên sau. Phải chọn `[id^="Weight_"]` |
+| **`IsHazmat_*` mặc định ĐANG TÍCH** | Tài liệu ghi "Shipment contains: bỏ tích" — dễ đọc nhầm thành "để nguyên". Không bỏ tích thì BOL khai hàng nguy hiểm |
+| `Name_ShipmentPartyConsignee` xuất hiện **2 lần** (Company + Contact) | `getElementById` chỉ thấy cái đầu → điền nhầm ô |
+| Nhập zip **KHÔNG tự điền** city/state (trái với mô tả cũ ở bước 3) | Để trống là BOL thiếu địa chỉ. Phải điền tay cả ba |
+
+Ô Reference: `#generate-pro-number` (phải TÍCH) · `#customer-bol-number` = PO ·
+`#shipper-reference-number-0` = PO · `#purchase-order-number-0` = Customer Order #.
+
+⚠️ **Đọc BOL#/PRO# NGAY sau Finalize và ghi ra file.** Trang `/workspace/bol/<id>` chết sau khi
+rời đi (lỗi #16) — mất số là mất luôn. `taoBOL()` trả cả hai số và ghi log ngay.
+
 ### 🔴 NẾU KHÔNG TẢI ĐƯỢC BOL / SHIPPING LABEL
 Triệu chứng: viewer PDF hiện thanh công cụ + "Page 1 of 1" nhưng **spinner quay mãi**, `canvas = 0`; `Create Label PDF` bấm không mở tab mới. Trang **không báo lỗi gì**.
 
