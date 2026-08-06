@@ -1,7 +1,7 @@
 # CLAUDE.md — Dự án DSM AllForWood
 
 Claude Code đọc file này tự động. Đây là bản tóm tắt **đã kiểm chứng thực tế**; chi tiết trong các file
-được dẫn ở dưới. Cập nhật **05/08/2026**.
+được dẫn ở dưới. Cập nhật **06/08/2026**.
 
 ---
 
@@ -41,7 +41,8 @@ Mỗi đơn LTL/pallet: đọc packing slip → chọn carrier → tạo BOL (+ 
 → tạo folder Drive theo ngày → upload file → điền Google Sheet → PRO tự về.
 
 Phần đã tự động hoàn toàn (chạy trên server Google, không cần máy nào bật):
-`CheckRithum` nạp đơn mới · `TraPRO` tra PRO XGSI/BXID · `CheckMail_PRO` đọc PRO từ folder `SIGNED PRO#`.
+`CheckRithum` nạp đơn mới · `TraPRO` tra PRO XGSI/BXID · `CheckMail_PRO` đọc PRO từ folder `SIGNED PRO#`
+(⚠️ người dùng muốn **đổi lại về đọc mail** — xem mục 8, việc treo #2).
 
 Phần cần người/AI: đọc packing slip, chọn carrier, điền form web carrier.
 
@@ -217,32 +218,78 @@ mỗi SKU một dòng. Loại gỗ = chữ sau `Unfinished` ở cột B của `p
 
 ## 8. TRẠNG THÁI & VIỆC CÒN TREO
 
-- **Không còn mail báo kho.** `GuiMail_BOL.gs` đã bỏ (nằm trong `06_File_Cu_KHONG_DUNG/`),
-  trigger `processOrders` **đã xoá 04/08 — không tạo lại**.
-  **Cột M do NGƯỜI DÙNG ghi tay — chốt 06/08/2026, không tự động hoá.** Script không đụng vào.
-- Trigger đang chạy: `fillPro` (info@, 15′) · `checkMarioPro` (b2b@, 15′) ·
-  `checkRithumOrders` (rithumgetorder@, 10′).
-- **Dedup đã bịt kín nhưng CHƯA DEPLOY** (05/08/2026). `needSlip&checkSlip=1` giờ kiểm hai nguồn:
-  `<fid>_manifest.json` trong `_INBOX` (do `run.mjs` ghi ngay sau khi tải) **và**
-  `<PO>_PackingSlip.pdf` trong folder `PO - <po>`. Trước đây chỉ kiểm nguồn thứ hai — mà file đó
-  chỉ có **sau bước tách tay**, nên khoảng giữa "đã tải" và "đã tách" là mù, chạy lại là submit trùng.
-  ⚠️ Sửa nằm trong `NhanFile_Drive_WebApp.gs` → **phải Deploy ▸ New version mới có tác dụng**.
-  Chưa deploy thì `--dedup` vẫn chạy theo luật cũ.
-- **Bản VM ĐÃ CHẠY THẬT 05/08/2026.** Lô đầu (2 PO) đi trọn submit → Drive. Nay tự tách file gộp
-  thành `<PO>_PackingSlip.pdf` (`tachTheoPO`, khảo sát 11 file: mỗi slip 1 trang, mỗi trang 1 PO).
-  Chạy tự động qua cron: `*/30 7-19 * * 1-5 chay-dinh-ky.sh` (có flock, `--max 15`, log ICT).
-- **Session DSM chỉ sống vài tiếng** — đo 05/08: đăng nhập 10:53, chết trước 15:46. Đăng nhập lại
-  **bắt buộc có người** (`sso.auth.commercehub.com`, OAuth/Frontegg, không API key) qua Xvfb+VNC.
-  → Cron ghi `ma 3` phần lớn thời gian là **bình thường**, không phải bug. Chưa rõ hoạt động
-  định kỳ có gia hạn session không.
-- **Đã kiểm chứng đủ 05/08.** Lô 1: 2 PO → DSM tách **2 file**. Lô 2: 4 PO → DSM gộp **1 file**
-  4 trang. Cả hai hành vi đều thật, không đoán trước được — đó là lý do phải duyệt hết `pendingFiles`.
-  `tachTheoPO` cắt đúng, số ký tự từng mảnh khớp tuyệt đối với trang nguồn.
-  Vòng đời dedup chạy đủ: chặn bằng manifest → `donDepManifest` xoá → vẫn chặn bằng file đã tách.
-- `carrier.csv` thiếu **AK** và **HI**. NCA và SCA cho kết quả giống nhau.
-- Folder Drive cũ `1ER7RWu-66baF1uvB4AuBByN7OS-FJdAI` (cấu trúc phẳng): để nguyên lưu trữ, không dùng.
-- **Sheet có nhiều người sửa cùng lúc** — luôn lấy danh sách PO ngay trước khi submit, đừng dùng lại
-  kết quả cũ. (Kiểm 05/08: cách nhau vài phút, 1 PO → 2 PO.)
+Cập nhật **06/08/2026**.
+
+### ✅ Đang chạy tự động, không cần ai
+
+| | Lịch |
+|---|---|
+| `CheckRithum` đơn mới → cột A/B | trigger 10′ |
+| `TraPRO` PRO cho XGSI/BXID → cột N | trigger 15′ |
+| `CheckMail_PRO` PRO cho SEFL/CTII/FXFE/ABFS → cột N | trigger 15′ |
+| `chay-dinh-ky.sh` = `run.mjs` (tải+tách slip) → `xu-ly-don.mjs` (dựng BOL) | cron `*/5 7-19 * * 1-5` |
+| `giu-session.sh` chạm nhẹ DSM giữ session | cron `2-59/5 * * * *` (24/7) |
+| `don-dep.sh` dọn `_INBOX` | cron `25 * * * *` |
+
+**Đã kiểm chứng thực địa:** `run.mjs` 2 lô thật · `tachTheoPO` trên file gộp 4 PO của DSM ·
+vòng đời dedup 2 nguồn · `taoBOL` AACT (tạo thật BOL `4178975`) · tải BOL+Label của 5 đơn ·
+parser chọn carrier **24/24 khớp cột C**.
+
+---
+
+### 🔴 VIỆC CÒN TREO — chờ người dùng quyết
+
+**1. CTII — CHƯA CHO SUBMIT.** Người dùng chốt phải dừng trước nút Submit, chưa quyết khi nào mở.
+`ctii.mjs` điền được trọn form và `datYeuCau()` kiểm đủ điều kiện, nhưng **không có hàm nào bấm
+`bSubmit`**. Submit CTII tạo **lệnh pickup thật với Central Transport, không huỷ được** — và form
+BOL của họ **mở công khai không cần đăng nhập**, nên không có rào cản nào ngoài chính đoạn code này.
+→ `xu-ly-don.mjs` bỏ qua toàn bộ đơn CTII.
+
+Còn thiếu nếu sau này mở: bấm Submit → đọc Pickup # → tải BOL + ShippingLabel (fetch same-origin,
+xem `6_QuyTrinh_CTII.md`) → `fillRow` kèm `pickupNum` → cột **O**.
+⚠️ Kèm theo là **xung đột trần 20 đơn/ngày**: CTII chốt lịch xe TRƯỚC khi `fillRow` chạy, nên phải
+`skipCap:true` và đọc `pickupMoved`, nếu không mail kho báo một ngày mà xe đến ngày khác.
+
+**2. ĐỔI PRO VỀ ĐỌC MAIL, KHÔNG ĐỌC DRIVE.** Người dùng yêu cầu 06/08/2026.
+Hiện `CheckMail_PRO.gs` đọc PRO từ folder `SIGNED PRO#` trên Drive (đổi 01/08). Muốn quay lại
+đọc mail Mario reply về `b2b@allforwood.com`.
+✅ **Code cũ CÒN NGUYÊN** — `getProFromMario(po, carrier)` ở dòng 158, chưa xoá, chỉ không được gọi.
+Đổi lại là chuyện thay lời gọi trong `checkMarioPro()`, không phải viết mới.
+Cần chốt trước: đọc mail **thay hẳn** Drive, hay **thử mail trước rồi mới tới Drive**?
+
+---
+
+### ⚠️ Chưa kiểm chứng — biết là chưa chắc
+
+- **`xu-ly-don.mjs` chưa xử lý MỘT đơn thật nào.** Cả hai nhánh mới chỉ chạy `--dry`
+  (`11_TaiVe/aact/` rỗng). Lô Misc đầu tiên sẽ là lần chạy thật đầu tiên, **không ai trông**, và
+  với đơn AACT nó **tạo BOL thật**. Trần `DSM_MAX_BOL=10`.
+- **Chỉ cột C được đối chiếu.** `shipTo` · `sku` · `productName` · `qty` rút từ slip nhưng chưa
+  lần nào so với sheet — `lookup` không trả về mấy cột đó. Lô đầu nên xem tay cột E–I.
+- **Giữ session có tác dụng không: chưa biết.** Đêm 06/08 là đêm đầu đo liên tục 24/7.
+  Đọc `grep CHET 11_TaiVe/logs/giu-session.log | tail` → tuổi vượt xa 5 tiếng = sliding, giữ cron;
+  luôn chết quanh cùng một mốc = tuyệt đối, **gỡ cron cho đỡ 288 request/ngày vô ích**.
+
+### 🔧 Việc nhỏ
+
+- **`pallet.csv` thiếu 4 SKU** thấy trong lô 28 đơn: `833250` · `814300` · `815253` · `836250`.
+  Đơn Misc dùng chúng sẽ bị gạt sang danh sách chờ (không tính được weight → không dựng được BOL).
+- `carrier.csv` thiếu **AK** và **HI** → dừng và hỏi. NCA/SCA cho kết quả giống nhau.
+- **Đơn nhiều SKU: parser TỪ CHỐI**, chưa có mẫu thật nào để kiểm. 28 đơn khảo sát đều 1 SKU.
+- **Cột N và O chưa đi qua `_ghiText_`** — vẫn dùng `setValue` trần nên có thể bị ép thành số.
+  PRO của AACT không có số 0 đầu nên chưa gặp sự cố, carrier khác chưa kiểm.
+- **Slip đơn Ground tích tụ ở `_INBOX` vĩnh viễn** — chúng không bao giờ có folder `PO - <po>` nên
+  `donDepManifest` luôn giữ lại. Đúng thiết kế, nhưng `_INBOX` sẽ dày dần.
+- **`--dry` của `xu-ly-don.mjs` không áp `--max`** → báo "sẽ làm 25" trong khi chạy thật chỉ làm 10.
+- **Không có cảnh báo đơn quá hạn pickup mà chưa có PRO.** Ví dụ 4 đơn XGSI pickup 05/08 tới
+  06/08 vẫn `404` — không ai biết trừ khi tra tay.
+- **4 số PRO biến mất khỏi sheet 06/08** khi người dùng sửa cột: `20565416` · `77754043` ·
+  `77850772` · `77860619` (cột N), 3 đơn mất cả link cột P. Số thật lấy lại được từ BOL đã tải
+  (`11_TaiVe/bol/`). **Chưa khôi phục — chờ người dùng xác nhận cố ý hay vô tình.**
+- **BOL rác `4178975`** (PRO `39004838`) trên hệ thống AACT — cố ý tạo 06/08 để nghiệm thu đường
+  Finalize, không xoá được. Đừng tưởng là BOL thật.
+- Folder Drive cũ `1ER7RWu-66baF1uvB4AuBByN7OS-FJdAI` (phẳng): để nguyên lưu trữ, không dùng.
+- **Sheet có nhiều người sửa cùng lúc** — luôn lấy danh sách PO ngay trước khi submit.
 
 ---
 
