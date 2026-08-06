@@ -27,7 +27,10 @@ Claude Code đọc file này tự động. Đây là bản tóm tắt **đã ki�
    còn ra Date thì ghi lại kèm dấu nháy đầu. Áp cho **cả cột B (PO) và cột K**.
 6. **Sửa web app Apps Script phải Deploy ▸ New version.** Trigger dùng code Head (Save là đủ),
    web app thì KHÔNG.
-7. Đơn **Ground** vẫn lưu Drive, **không lọc bỏ** (chốt 05/08/2026).
+7. Đơn **Ground** — 🔄 **ĐỔI 06/08/2026, quyết định cũ đã hết hiệu lực.** Trước ghi "chỉ dừng ở
+   mức có slip trên Drive". Nay có quy trình riêng đầy đủ: UPS tạo shipping label → Lecangs →
+   ghi Tracking Number vào **cột N**. Xem `01_HuongDan_VanHanh/7_QuyTrinh_Ground_UPS.md`.
+   **Code hiện tại CHƯA làm gì trong số đó** — `xu-ly-don.mjs` vẫn bỏ qua đơn Ground.
 8. Trả lời **ngắn gọn, tiếng Việt**.
 9. Phát hiện bug hay cách làm nhanh hơn thì **ghi vào file hướng dẫn tương ứng** — đó là cách dự án
    không mất kinh nghiệm khi đổi máy/đổi công cụ.
