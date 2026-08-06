@@ -86,8 +86,9 @@ Folder gốc cũ `1ER7RWu-66baF1uvB4AuBByN7OS-FJdAI` (cấu trúc phẳng): **đ
 | O (Pickup #) | `fillRow`, chỉ CTII |
 | **D, L, M, Q** | **NGƯỜI DÙNG tự ghi** — script không đụng |
 
-> **Cột M (Warehouse Notification) nay do người dùng ghi tay** (chốt 04/08/2026).
-> Mail báo kho đã bỏ từ 01/08 nên không còn gì đánh X tự động.
+> **Cột M (Warehouse Notification) do người dùng ghi tay — CHỐT 06/08/2026, không tự động hoá.**
+> Mail báo kho đã bỏ từ 01/08 nên không còn gì đánh X tự động. Đây là quyết định cuối, không phải
+> việc còn treo.
 
 ---
 

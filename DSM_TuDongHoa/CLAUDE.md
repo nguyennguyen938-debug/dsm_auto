@@ -218,7 +218,8 @@ mỗi SKU một dòng. Loại gỗ = chữ sau `Unfinished` ở cột B của `p
 ## 8. TRẠNG THÁI & VIỆC CÒN TREO
 
 - **Không còn mail báo kho.** `GuiMail_BOL.gs` đã bỏ (nằm trong `06_File_Cu_KHONG_DUNG/`),
-  trigger `processOrders` **đã xoá 04/08 — không tạo lại**. Cột M người dùng ghi tay.
+  trigger `processOrders` **đã xoá 04/08 — không tạo lại**.
+  **Cột M do NGƯỜI DÙNG ghi tay — chốt 06/08/2026, không tự động hoá.** Script không đụng vào.
 - Trigger đang chạy: `fillPro` (info@, 15′) · `checkMarioPro` (b2b@, 15′) ·
   `checkRithumOrders` (rithumgetorder@, 10′).
 - **Dedup đã bịt kín nhưng CHƯA DEPLOY** (05/08/2026). `needSlip&checkSlip=1` giờ kiểm hai nguồn:
