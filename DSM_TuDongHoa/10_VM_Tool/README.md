@@ -169,8 +169,26 @@ nằm trong file** (lấy từ `pendingFiles`, không lấy danh sách đã subm
 
 ## Nhánh KHÔNG cần web — `xu-ly-don.mjs` (thêm 06/08/2026)
 
-Nối tiếp `run.mjs`. Chỉ làm **SEFL · XGSI · BXID · FXFE · ABFS**; AACT/CTII phải điền trên web
-carrier nên script này bỏ qua, để dành nhánh riêng.
+Nối tiếp `run.mjs`. Hai nhánh, **mức rủi ro khác hẳn nhau**:
+
+| Nhóm | Cách dựng BOL | Rủi ro |
+|---|---|---|
+| SEFL · XGSI · BXID · FXFE · ABFS | form BOL chung, không cần trình duyệt | Sai thì sửa được |
+| **AACT** | ⛔ **Finalize trên aaacooper.com — tạo BOL#/PRO# THẬT** | Không hoàn tác |
+| CTII | **không làm** — submit tạo lệnh pickup thật, đã chốt phải dừng trước Submit | — |
+
+**Với AACT, thứ tự trong mỗi đơn không được đảo:**
+
+```
+Finalize -> GHI NGAY BOL#/PRO# ra 11_TaiVe/aact/<PO>.json -> tải file -> Drive -> sheet
+```
+
+Finalize không hoàn tác được, mọi bước sau đều làm lại được. File `<PO>.json` là bằng chứng
+"đơn này đã có BOL rồi" — lần chạy sau đọc thấy thì **dùng lại số cũ, không tạo BOL thứ hai**.
+Thiếu nó thì cột C vẫn trống và lượt sau sẽ tạo thêm một BOL rác.
+
+Trường hợp tệ nhất — Finalize xong mà **không đọc được BOL#/PRO#** — script **exit 7** và in
+hướng dẫn lấy số bằng tay, vì lúc đó BOL đã tồn tại thật mà máy không biết số.
 
 ```bash
 node xu-ly-don.mjs --dry     # chỉ liệt kê, KHÔNG ghi gì — chạy cái này TRƯỚC

@@ -3,16 +3,24 @@
  * ============================================================================
  *  xu-ly-don.mjs — nối tiếp run.mjs: slip -> BOL -> Drive -> sheet
  * ----------------------------------------------------------------------------
- *  CHỈ làm nhóm carrier KHÔNG cần web: SEFL · XGSI · BXID · FXFE · ABFS.
- *  AACT và CTII phải điền trên web carrier -> để nhánh riêng, script này BỎ QUA.
+ *  Hai nhánh, mức rủi ro KHÁC HẲN nhau:
+ *    SEFL·XGSI·BXID·FXFE·ABFS — form BOL chung, không cần trình duyệt. Sai thì sửa được.
+ *    AACT                     — ⛔ Finalize trên aaacooper.com tạo BOL#/PRO# THẬT.
+ *    CTII                     — KHÔNG làm. Submit tạo lệnh pickup thật; người dùng
+ *                               chốt phải dừng trước Submit nên không tự động hoá.
  *
  *    node xu-ly-don.mjs --dry          # chỉ liệt kê sẽ làm gì, KHÔNG ghi gì
  *    node xu-ly-don.mjs                # chạy thật
  *    node xu-ly-don.mjs --only 123     # giới hạn PO
  *    node xu-ly-don.mjs --max 10       # trần số đơn mỗi lần chạy
  *
- *  ⛔ Chạy thật sẽ GHI VÀO SHEET và TẠO FILE trên Drive. Không tạo lệnh pickup,
- *     không đụng web carrier — nên sai thì sửa được: xoá file, sửa dòng sheet.
+ *  ⛔ Chạy thật GHI VÀO SHEET, TẠO FILE trên Drive, và với AACT thì TẠO BOL THẬT.
+ *     Không tạo lệnh pickup nào (chỉ CTII mới tạo, mà CTII không nằm trong script này).
+ *
+ *  🔴 Với AACT, thứ tự trong mỗi đơn KHÔNG ĐƯỢC ĐẢO:
+ *       Finalize -> GHI NGAY BOL#/PRO# ra 11_TaiVe/aact/<PO>.json -> tải file -> Drive -> sheet
+ *     Finalize không hoàn tác được, mọi bước sau làm lại được. File đó là bằng chứng
+ *     "đơn này đã có BOL"; thiếu nó thì lần chạy sau tạo BOL THỨ HAI.
  *
  *  Thứ tự makeFolder -> upload -> fillRow KHÔNG ĐƯỢC ĐẢO (xem CLAUDE.md mục 4):
  *  tên folder ngày phụ thuộc ngày pickup, mà ngày pickup có thể bị trần 20 đơn/ngày
@@ -25,13 +33,36 @@ import { spawn } from 'node:child_process';
 import { docSlip, chonCarrier, docBangCarrier } from './doc-slip.mjs';
 import * as B from './bol-tinh.mjs';
 import * as W from './webapp.mjs';
+import * as AACT from './aact.mjs';
 
 const GOC = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const SLIPDIR = process.env.DSM_SLIP || path.join(GOC, '11_TaiVe', 'packingslip');
 const BOLDIR = process.env.DSM_BOL || path.join(GOC, '11_TaiVe', 'bol');
 
-/** Carrier script này tự làm được. AACT/CTII cần web carrier -> không nằm đây. */
-const TU_LAM = new Set(['SEFL', 'XGSI', 'BXID', 'FXFE', 'ABFS']);
+/** Carrier dựng BOL bằng form chung — KHÔNG cần trình duyệt, không cần đăng nhập. */
+const KHONG_WEB = new Set(['SEFL', 'XGSI', 'BXID', 'FXFE', 'ABFS']);
+
+/**
+ * AACT — cần trình duyệt + đăng nhập, và **Finalize tạo BOL#/PRO# THẬT**.
+ * CTII vẫn KHÔNG nằm đây: submit CTII tạo lệnh pickup thật, người dùng đã chốt
+ * phải dừng trước Submit nên không tự động hoá được.
+ */
+const CAN_AACT = 'AACT';
+
+/**
+ * Nơi ghi BOL#/PRO# NGAY sau Finalize.
+ *
+ * 🔴 VÌ SAO CẦN: Finalize không hoàn tác được, còn upload/fillRow thì có. Nếu tạo
+ *    BOL xong mà bước sau hỏng, cột C vẫn trống -> lần chạy tới sẽ tạo BOL LẦN NỮA
+ *    = BOL rác + PRO rác. File này là bằng chứng "đơn đã có BOL rồi", đọc trước khi
+ *    quyết định tạo. Cùng nguyên tắc với manifest ở run.mjs.
+ */
+const AACTDIR = process.env.DSM_AACT || path.join(GOC, '11_TaiVe', 'aact');
+const fileAact = po => path.join(AACTDIR, `${po}.json`);
+
+async function docDaTaoBOL(po) {
+  try { return JSON.parse(await fs.readFile(fileAact(po), 'utf8')); } catch { return null; }
+}
 
 const argv = process.argv.slice(2);
 const DRY = argv.includes('--dry');
@@ -64,6 +95,7 @@ function dungHtmlBOL(v) {
 
 async function main() {
   await fs.mkdir(BOLDIR, { recursive: true });
+  await fs.mkdir(AACTDIR, { recursive: true });
 
   // --- 1. slip có sẵn trên đĩa (run.mjs đã tách và tải về) ----------------
   let tep;
@@ -108,13 +140,16 @@ async function main() {
     try { carrier = chonCarrier(bangCarrier, d.shipTo.bang, d.shipTo.laStore); }
     catch (e) { cho.push({ po, ly_do: e.message }); continue; }
 
-    if (!TU_LAM.has(carrier)) { boQua.push({ po, ly_do: `${carrier} — can web carrier, de nhanh rieng` }); continue; }
+    if (carrier !== CAN_AACT && !KHONG_WEB.has(carrier)) {
+      boQua.push({ po, ly_do: `${carrier} — can web carrier, chua tu dong (CTII phai dung truoc Submit)` });
+      continue;
+    }
 
     let tinh;
     try { tinh = B.tinhBOL(d.items[0], pallet, bangClass); }
     catch (e) { cho.push({ po, ly_do: e.message }); continue; }
 
-    lam.push({ po, d, carrier, tinh });
+    lam.push({ po, d, carrier, tinh, laAact: carrier === CAN_AACT });
   }
 
   log(`se lam ${lam.length} | bo qua ${boQua.length} | cho nguoi xem ${cho.length}`);
@@ -123,7 +158,7 @@ async function main() {
 
   if (!lam.length) return;
   for (const x of lam) {
-    log(`   -> ${x.po} ${x.carrier} | ${x.d.shipTo.laStore ? 'store' : 'khach'} ${x.d.shipTo.bang}` +
+    log(`   -> ${x.po} ${x.carrier}${x.laAact ? ' [web]' : ''} | ${x.d.shipTo.laStore ? 'store' : 'khach'} ${x.d.shipTo.bang}` +
         ` | ${x.tinh.qty}x ${x.d.items[0].model} | ${x.tinh.weight} lb | class ${x.tinh.cls}`);
   }
 
@@ -134,9 +169,9 @@ async function main() {
     lam.length = MAX;
   }
 
-  // --- 3. từng đơn: BOL -> folder -> upload -> fillRow ---------------------
+  // --- 3. nhóm KHÔNG cần web trước: rẻ, không cần trình duyệt --------------
   let xong = 0;
-  for (const x of lam) {
+  for (const x of lam.filter(v => !v.laAact)) {
     try {
       const html = await dungHtmlBOL({
         date: np.mmddyyyy, po: x.po, carrier: x.carrier,
@@ -176,8 +211,100 @@ async function main() {
       console.error(`\n❌ ${x.po}: ${e.message}\n   Khong tao lenh pickup nao — sua roi chay lai duoc.\n`);
     }
   }
+
+  // --- 4. nhóm AACT: cần trình duyệt + đăng nhập ---------------------------
+  const dsAact = lam.filter(v => v.laAact);
+  if (dsAact.length) xong += await lamAACT(dsAact, np);
+
   log('---');
   log(`xong ${xong}/${lam.length}` + (cho.length ? ` | ${cho.length} don cho nguoi xem` : ''));
+}
+
+/**
+ * Nhánh AACT. Mở trình duyệt MỘT lần cho cả lô — đăng nhập lại từng đơn thì chậm
+ * và dễ bị coi là bot.
+ *
+ * ⛔ Thứ tự trong mỗi đơn KHÔNG ĐƯỢC ĐẢO:
+ *      taoBOL(finalize) -> GHI NGAY BOL#/PRO# ra đĩa -> tải file -> Drive -> sheet
+ *    Finalize không hoàn tác được, mọi bước sau đều làm lại được. Ghi số ra đĩa
+ *    TRƯỚC khi làm bất cứ việc gì khác, vì trang /workspace/bol/<id> chết sau khi
+ *    rời đi (lỗi #16) — mất số là mất luôn, và lần chạy sau sẽ tạo BOL thứ hai.
+ */
+async function lamAACT(ds, np) {
+  const { chromium } = await import('playwright');
+  let xong = 0;
+  const b = await chromium.launch({ headless: true });
+  const ctx = await b.newContext({ acceptDownloads: true });
+  const page = await ctx.newPage();
+  try {
+    const dn = await AACT.dangNhap(page);
+    if (!dn.ok) {
+      process.exitCode = 6;
+      console.error(`\n❌ Khong dang nhap duoc AACT: ${dn.noiDen}\n   Bo qua ${ds.length} don AACT, KHONG tao BOL nao.\n`);
+      return 0;
+    }
+    log(`AACT: dang nhap OK, ${ds.length} don`);
+
+    for (const x of ds) {
+      try {
+        // Đã tạo BOL ở lần chạy trước mà chưa xong các bước sau -> DÙNG LẠI, đừng tạo nữa
+        let da = await docDaTaoBOL(x.po);
+        if (da) {
+          log(`${x.po}: da co BOL# ${da.bolNumber} tu ${da.luc} — KHONG tao lai`);
+        } else {
+          const r = await AACT.taoBOL(page, {
+            po: x.po, customerOrder: x.d.customerOrder, consignee: x.d.shipTo,
+            tinh: x.tinh, moTa: x.d.items[0].moTa
+          }, { finalize: true });
+
+          if (r.daTao && (!r.bolNumber || !r.pro)) {
+            process.exitCode = 7;
+            console.error(`\n⛔ ${x.po}: DA FINALIZE nhung khong doc duoc BOL#/PRO#.\n` +
+                          `   BOL DA TON TAI tren AACT. Vao aaacooper.com lay so BANG TAY roi\n` +
+                          `   tao ${fileAact(x.po)} voi {"bolNumber":"...","pro":"..."} truoc khi chay lai,\n` +
+                          `   neu khong lan sau se tao BOL THU HAI.\n`);
+            continue;
+          }
+          if (!r.ok) throw new Error(r.ly_do || 'taoBOL that bai');
+
+          // GHI NGAY, trước mọi bước khác
+          da = { bolNumber: r.bolNumber, pro: r.pro, luc: new Date().toISOString() };
+          await fs.writeFile(fileAact(x.po), JSON.stringify(da, null, 1));
+          log(`${x.po}: ✅ BOL# ${da.bolNumber} | PRO# ${da.pro} (da ghi ra dia)`);
+        }
+
+        // Từ đây trở đi mọi thứ đều làm lại được
+        const fBol = await AACT.taiTuViewer(page, AACT.urlBolPdf(da.bolNumber));
+        if (!fBol.ok) throw new Error('tai BOL: ' + fBol.ly_do);
+        const fLbl = await AACT.taiShippingLabel(page, da.bolNumber);
+        if (!fLbl.ok) throw new Error('tai ShippingLabel: ' + fLbl.ly_do);
+        await fs.writeFile(path.join(BOLDIR, `${x.po}_BOL.pdf`), fBol.buf);
+        await fs.writeFile(path.join(BOLDIR, `${x.po}_ShippingLabel.pdf`), fLbl.buf);
+
+        const mk = await W.makeFolder(x.po, np.mmddyyyy);
+        await W.uploadFile(mk.folderId, `${x.po}_BOL.pdf`, fBol.buf);
+        await W.uploadFile(mk.folderId, `${x.po}_ShippingLabel.pdf`, fLbl.buf);
+        const slip = await fs.readFile(path.join(SLIPDIR, `${x.po}_PackingSlip.pdf`));
+        await W.uploadFile(mk.folderId, `${x.po}_PackingSlip.pdf`, slip);
+
+        const fr = await W.fillRow({
+          po: x.po, carrier: 'AACT', customerOrder: x.d.customerOrder,
+          shipTo: x.d.shipTo.ten, sku: x.d.items[0].model,
+          productName: x.d.items[0].moTa, qty: String(x.tinh.qty),
+          pickupSchedule: mk.pickupSchedule, skipCap: true, linkDrive: mk.url,
+          pro: da.pro          // AACT la carrier DUY NHAT gui pro ngay
+        });
+        log(`${x.po}: ✅ hang ${fr.row} | pickup ${fr.pickupSchedule} | 3 file | PRO ${da.pro}`);
+        xong++;
+      } catch (e) {
+        process.exitCode = 5;
+        console.error(`\n❌ ${x.po}: ${e.message}\n` +
+                      `   Neu BOL da tao thi so nam o ${fileAact(x.po)} — chay lai se DUNG LAI so do,\n` +
+                      `   khong tao BOL thu hai.\n`);
+      }
+    }
+  } finally { await ctx.close(); await b.close(); }
+  return xong;
 }
 
 main().catch(e => { console.error('\n❌ ' + e.stack + '\n'); process.exit(1); });
