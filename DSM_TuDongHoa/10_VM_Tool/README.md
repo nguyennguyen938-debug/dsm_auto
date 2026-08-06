@@ -223,9 +223,18 @@ Gọi qua `chay-dinh-ky.sh`, **đừng gọi `run.mjs` thẳng từ cron** (thi�
 thiếu dịch mã thoát):
 
 ```cron
-*/30 7-19 * * 1-5 /home/Lenovo/dsm_auto/DSM_TuDongHoa/10_VM_Tool/chay-dinh-ky.sh
-*/5  6-20 * * 1-5 /home/Lenovo/dsm_auto/DSM_TuDongHoa/10_VM_Tool/giu-session.sh
+*/30   7-19 * * 1-5  chay-dinh-ky.sh
+2-59/5 *    * * *    giu-session.sh
 ```
+
+🔴 **Phút của `giu-session` phải LỆCH khỏi `:00` và `:30`.** Hai script dùng **chung khoá**;
+`*/5` và `*/30` trùng nhau đúng ở hai mốc đó, nên job chính bị job giữ-session bỏ đói.
+Đã xảy ra 06/08: `08:30` và `09:00` đều `BO QUA — lan chay truoc chua xong`.
+`2-59/5` cho 2,7,12,…,57 — không bao giờ chạm `:00`/`:30`.
+
+`giu-session` chạy **24/7**, không giới hạn giờ: khung `6-20` để lại khoảng mù 9 tiếng ban đêm,
+đúng lúc session chết nên không đo được gì (05/08 dòng SONG cuối lúc 20:55 tuổi 4h54m, dòng CHET
+đầu lúc 06:00 tuổi 13h59m — chết ở đâu đó giữa hai mốc, không biết lúc nào).
 
 Log: `../11_TaiVe/logs/dsm-tool.log`. Chạy thử không submit: `DSM_DRY=1 ./chay-dinh-ky.sh`.
 
