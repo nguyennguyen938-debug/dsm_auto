@@ -31,6 +31,8 @@ Claude Code đọc file này tự động. Đây là bản tóm tắt **đã ki�
    mức có slip trên Drive". Nay có quy trình riêng đầy đủ: UPS tạo shipping label → Lecangs →
    ghi Tracking Number vào **cột N**. Xem `01_HuongDan_VanHanh/7_QuyTrinh_Ground_UPS.md`.
    **Code hiện tại CHƯA làm gì trong số đó** — `xu-ly-don.mjs` vẫn bỏ qua đơn Ground.
+   ⚠️ Đơn Ground **KHÔNG áp trần 20 đơn/ngày** — `makeFolder` hiện luôn áp trần cho mọi đơn,
+   cần thêm đường bỏ qua, chưa có.
 8. Trả lời **ngắn gọn, tiếng Việt**.
 9. Phát hiện bug hay cách làm nhanh hơn thì **ghi vào file hướng dẫn tương ứng** — đó là cách dự án
    không mất kinh nghiệm khi đổi máy/đổi công cụ.

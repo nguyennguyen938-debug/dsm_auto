@@ -24,13 +24,31 @@ Theo `1_DocPackingSlip.md`.
    → hiện danh sách kho.
 3. Chọn **kho còn hàng gần nhất** — xem cột **Available Stock** để biết còn hàng hay không.
 
+> ❗ **Không kho nào còn hàng → DỪNG và HỎI NGƯỜI DÙNG.** Không tự chọn kho hết hàng.
+> (Chốt 06/08; thực tế hiếm khi xảy ra.)
+
 > ⭐ **4 SKU NGOẠI LỆ: `838390` · `836390` · `816390` · `818390`**
 > Không cần chọn kho theo các bước trên — **mặc định kho Calhoun**.
 > Bốn SKU này cũng **KHÔNG qua Lecangs** (xem Phần 3).
 
 ### Bước 3: Tạo shipping label trên UPS
 
-`https://www.ups.com/ship/guided/destination?tx=11988064950853242&loc=en_US`
+**KHÔNG dùng URL `/ship/guided/destination?tx=...`** — `tx=` là **mã phiên**, hard-code sẽ hỏng.
+
+Vào: `https://www.ups.com/ppc/dashboard.html?loc=en_US#/companyDashboard`
+→ khối **Shipment Activity** → nút **Create a Shipment**.
+
+### 🔐 Đăng nhập UPS — CÓ MFA (khác AACT)
+
+Tài khoản `info@allforwood.com`. Sau khi nhập mật khẩu ấn **Continue**:
+1. Trang **Verify Your Identity** → chọn **Email**
+2. Vào Gmail `info@allforwood.com`, tìm thư từ **`noreply@id.ups.com`** → lấy mã
+3. **BẮT BUỘC tích `Remember this device for 30 days`** — nếu không thì mỗi lần chạy đều phải
+   lấy mã qua mail
+
+> 🔴 **Hệ quả kỹ thuật:** "nhớ thiết bị 30 ngày" gắn với **profile trình duyệt**. Muốn tự động thì
+> phải chạy Playwright với `--user-data-dir` CỐ ĐỊNH và giữ nguyên profile đó; mở context mới mỗi
+> lần là mất, và MFA sẽ hỏi lại. Đây là khác biệt lớn so với AACT (không MFA).
 
 #### Mục 1 — Where
 
@@ -78,7 +96,14 @@ Với từng package:
 - **Pickup Date** — theo **giờ Việt Nam tại thời điểm điền đơn**:
   - **Sau 15:00** → dùng đúng quy tắc như đơn Misc (hôm nay + T6 `+3` / T7 `+2` / còn lại `+1`)
   - **Trước hoặc đúng 15:00** → quy tắc Misc **rồi TRỪ 1 ngày**
-  - ❓ *Chưa rõ khi trừ 1 ngày rơi vào Thứ Bảy/Chủ Nhật thì xử lý sao — xem câu hỏi #4*
+
+  ✅ **Chốt 06/08:** áp dụng **đúng như công thức, KHÔNG bỏ Thứ Bảy/Chủ Nhật sau khi trừ.**
+  Lý do: ngày được chọn theo **giờ Mỹ**, để phía Mỹ kịp chuẩn bị — trừ 1 ngày là bù chênh lệch
+  múi giờ Việt Nam đi trước, không phải quy tắc nghiệp vụ.
+  Ví dụ Thứ Sáu trước 15:00 VN: `+3` → Thứ Hai, `−1` → **Chủ Nhật**. Vẫn lấy Chủ Nhật.
+
+  ❓ **CÂU HỎI CÒN MỞ:** quy tắc ±15:00 này **chưa quyết có áp cho đơn Misc hay không**.
+  Hiện Misc vẫn dùng công thức cũ (không xét giờ). Người dùng dặn **hỏi lại**.
 - **Pickup Details** → ấn **edit**:
   - Earliest Pickup Time: **luôn `1:00 PM`**
   - Latest Pickup Time: mặc định `5:00 PM`
@@ -107,8 +132,16 @@ Không làm gì → **Continue**
 Cửa sổ **Print** hiện ra:
 - **Bỏ trang đầu** (trang hướng dẫn), lấy **hết các trang phía sau** — mỗi trang là shipping label
   của một SKU.
-- Lưu **mỗi trang thành 1 file** vào folder `PO - <PO>`, đặt tên theo định dạng `<SKU>`.
-  ❓ *Chưa rõ đuôi/hậu tố chính xác — xem câu hỏi #5*
+- **Luôn có ĐÚNG 1 trang hướng dẫn** (chốt 06/08) → bỏ trang 1, lấy từ trang 2 trở đi.
+- Lưu **mỗi trang thành 1 file** vào folder `PO - <PO>`, tên:
+
+  ```
+  <SKU>_<số thứ tự bắt đầu từ 1>_ShippingLabel.pdf
+  ```
+
+  Số thứ tự giải quyết luôn trường hợp **một SKU có Qty > 1** (mỗi kiện một label, một tracking
+  number) và trường hợp đơn có SKU trùng nhau.
+  Ví dụ SKU `833250` Qty 2 → `833250_1_ShippingLabel.pdf` · `833250_2_ShippingLabel.pdf`
 - **Tracking Number → cột N** của sheet: **tất cả nằm trong CÙNG MỘT Ô**, mỗi Tracking Number
   một dòng.
 
@@ -181,6 +214,25 @@ Sau khi xong phần UPS, ngoài các file ShippingLabel thì **lưu thêm packin
 
 ---
 
+## Ghi vào sheet — đơn Ground CÓ điền, chốt 06/08
+
+Trước đây đơn Ground không được ghi gì. Nay **có gọi `makeFolder` và có điền sheet** như đơn thường:
+
+| Cột | Giá trị |
+|---|---|
+| C | `UPS` |
+| E · F · G · H · I | như đơn thường, lấy từ packing slip |
+| J | `X` |
+| K | ngày pickup theo quy tắc ±15:00 ở trên |
+| **N** | **TẤT CẢ Tracking Number trong CÙNG MỘT Ô**, mỗi số một dòng |
+| P | link folder Drive |
+
+> 🔴 **Đơn Ground KHÔNG áp trần 20 đơn/ngày.** `makeFolder` hiện **luôn** áp `MAX_PER_DAY` cho
+> mọi đơn — cần thêm đường bỏ qua trần cho Ground, nếu không ngày pickup sẽ bị dời và folder ngày
+> đặt sai tên. **Đây là thay đổi phải làm trong `NhanFile_Drive_WebApp.gs`, chưa có.**
+
+---
+
 ## Kết quả cuối
 
 Trong folder `PO - <PO>` của đơn Ground:
@@ -201,3 +253,10 @@ Trong folder `PO - <PO>` của đơn Ground:
 | ③ | **Đối chiếu tên kho: Lecangs ↔ UPS** | Phần 1, Mục 1 |
 
 Chưa có đủ ba bảng này thì **không cài đặt được**.
+
+## ❓ Câu hỏi còn mở
+
+1. **Quy tắc ±15:00 có áp cho đơn Misc không?** Người dùng dặn hỏi lại. Hiện Misc dùng công thức
+   cũ (hôm nay + T6 `+3` / T7 `+2` / còn lại `+1`), không xét giờ.
+2. **`makeFolder` cần đường bỏ trần cho Ground** — chưa cài.
+3. Đăng nhập **Lecangs** dùng tài khoản nào? Có MFA không? (UPS thì đã rõ: có MFA qua email.)
