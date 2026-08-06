@@ -215,6 +215,7 @@ Mọi luật điền vẫn nằm ở `fill_bol.py`, file kia không lặp lại 
 | 6 | Tải được nhưng **không upload được lên Drive** |
 | 7 | PDF đã lên Drive nhưng **không ghi được manifest** → chạy lại sẽ **submit trùng**, xem log để biết PO nào |
 | 8 | Có PO **đã submit nhưng slip không xuất hiện** sau 60 s → kiểm tay danh sách reprint trên DSM **trước khi** chạy lại |
+| 10 | Tải slip OK nhưng **khâu dựng BOL lỗi** — xem mã thật của `xu-ly-don` trong log. Không tạo lệnh pickup nào |
 | 9 | **Tách file thất bại** (hoặc file tách không lên được Drive). Không mất đơn — manifest đã ghi. Tách tay file gốc trong `_INBOX` |
 
 ## Cron — ĐANG CHẠY
@@ -223,9 +224,26 @@ Gọi qua `chay-dinh-ky.sh`, **đừng gọi `run.mjs` thẳng từ cron** (thi�
 thiếu dịch mã thoát):
 
 ```cron
-*/30   7-19 * * 1-5  chay-dinh-ky.sh
+*/5    7-19 * * 1-5  chay-dinh-ky.sh     # doi tu 30' -> 5' ngay 06/08
 2-59/5 *    * * *    giu-session.sh
 ```
+
+`chay-dinh-ky.sh` chạy **hai khâu nối tiếp**:
+
+| Khâu | Script | Cần session DSM? |
+|---|---|---|
+| 1 | `run.mjs` — tải + tách packing slip | **Có** |
+| 2 | `xu-ly-don.mjs` — dựng BOL nhóm không-web | **Không** |
+
+Khâu 2 chỉ nói chuyện với web app, nên **vẫn chạy khi khâu 1 báo `ma 3` (hết session DSM)** —
+khâu tải slip đứng nhưng BOL cho slip đã tải về từ trước vẫn tiếp tục. Chỉ bỏ qua khâu 2 khi
+khâu 1 chết vì lỗi lạ (`ma 1`).
+
+⚠️ **Mã thoát hai script trùng số nhưng khác nghĩa** (vd `5`: `run.mjs` = "không có file chờ",
+`xu-ly-don` = "có đơn lỗi"). Wrapper vì vậy KHÔNG gán `MA=$MA_BOL` mà dùng **mã riêng `10`**,
+nếu không bảng dịch sẽ nói sai.
+
+Trần: `DSM_MAX` (mặc định 15) cho khâu 1 · `DSM_MAX_BOL` (mặc định 10) cho khâu 2.
 
 🔴 **Phút của `giu-session` phải LỆCH khỏi `:00` và `:30`.** Hai script dùng **chung khoá**;
 `*/5` và `*/30` trùng nhau đúng ở hai mốc đó, nên job chính bị job giữ-session bỏ đói.

@@ -9,6 +9,7 @@
  *    node xu-ly-don.mjs --dry          # chỉ liệt kê sẽ làm gì, KHÔNG ghi gì
  *    node xu-ly-don.mjs                # chạy thật
  *    node xu-ly-don.mjs --only 123     # giới hạn PO
+ *    node xu-ly-don.mjs --max 10       # trần số đơn mỗi lần chạy
  *
  *  ⛔ Chạy thật sẽ GHI VÀO SHEET và TẠO FILE trên Drive. Không tạo lệnh pickup,
  *     không đụng web carrier — nên sai thì sửa được: xoá file, sửa dòng sheet.
@@ -42,6 +43,8 @@ const DRY = argv.includes('--dry');
  */
 const BO_LOC = argv.includes('--test-bo-loc-cot-CD');
 const ONLY = (() => { const i = argv.indexOf('--only'); return i >= 0 ? (argv[i + 1] || '').split(',').filter(Boolean) : null; })();
+/** Trần số đơn dựng BOL mỗi lần chạy — chặn khi sheet có sự cố sinh ra hàng loạt. */
+const MAX = (() => { const i = argv.indexOf('--max'); return i >= 0 ? parseInt(argv[i + 1], 10) || 0 : 0; })();
 
 const log = (...a) => console.log(new Date().toLocaleTimeString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }), ...a);
 
@@ -125,6 +128,11 @@ async function main() {
   }
 
   if (DRY) { log('--dry: khong ghi gi ca. Bo --dry de chay that.'); return; }
+
+  if (MAX > 0 && lam.length > MAX) {
+    log(`gioi han --max ${MAX}: lam ${MAX} don lan nay, ${lam.length - MAX} don de lan sau`);
+    lam.length = MAX;
+  }
 
   // --- 3. từng đơn: BOL -> folder -> upload -> fillRow ---------------------
   let xong = 0;
