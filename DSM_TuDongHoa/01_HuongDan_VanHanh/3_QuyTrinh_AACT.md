@@ -89,6 +89,30 @@ Truy cập: `https://www.aaacooper.com/workspace/bol?sourceBolTemplateId=50357`
 
 > Ghi chú: nút tải của trình duyệt lưu tên ngẫu nhiên; đổi tên sau khi tải (hoặc để Claude đổi tên khi đưa lên Drive).
 
+### ✅ TỰ ĐỘNG TẢI ĐƯỢC BẰNG PLAYWRIGHT (giải xong 06/08/2026) — `10_VM_Tool/aact.mjs`
+
+**Câu hỏi để ngỏ từ 01/08 ("AACT có endpoint PDF trực tiếp không?") — trả lời: KHÔNG.**
+`fetch` thẳng `/workspace/bol/<n>/pdf` trả `text/html` 81 KB. Workspace là ứng dụng
+**Blazor WebAssembly**; PDF được dựng **ngay trong trình duyệt** bằng Telerik
+(`Telerik.Documents.Fixed.wasm` ~2,8 MB). Không có URL nào tải thẳng được — và đó chính là
+lý do playbook cũ thấy `canvas:0` rồi bó tay, chứ không phải "sự cố toàn site".
+
+Cách chạy được: để WASM dựng xong rồi **bấm nút Download thật**.
+Nút nhận diện qua icon **`k-svg-i-download`** trong `.k-pdf-viewer` (nút kia là `k-svg-i-print`) —
+nút KHÔNG có chữ nên tìm theo text sẽ trượt. Bắt bằng sự kiện `download` của Playwright.
+
+| | Cách lấy |
+|---|---|
+| **BOL** | `/workspace/bol/<BOL#>/pdf` → là trang viewer → bấm Download |
+| **Shipping Label** | `/workspace/shipping-label?sourceBolNumber=<BOL#>` → **KHÔNG phải viewer**, là FORM: `Next` → `Create Label PDF` → **mở TAB MỚI** chứa viewer → bấm Download |
+
+Đã tải thật 06/08 cho PO 77860619 (BOL 4175504): `Bol-4175504.pdf` 92 KB ·
+`ShippingLabel-180625.pdf` 128 KB, cả hai `%PDF` hợp lệ.
+
+⚠️ Đăng nhập: ô user là `#AAACooperMasterPage_bodyContent_txtUserId`. **ĐỪNG lấy "ô text đầu
+tiên"** — trong cùng form còn ô tìm kiếm `placeholder="Enter City, State, Zip"` đứng TRƯỚC nó;
+lấy nhầm thì user rỗng, đăng nhập lặng lẽ hỏng và trang chỉ hiện lại chính nó.
+
 ### 🔴 NẾU KHÔNG TẢI ĐƯỢC BOL / SHIPPING LABEL
 Triệu chứng: viewer PDF hiện thanh công cụ + "Page 1 of 1" nhưng **spinner quay mãi**, `canvas = 0`; `Create Label PDF` bấm không mở tab mới. Trang **không báo lỗi gì**.
 
