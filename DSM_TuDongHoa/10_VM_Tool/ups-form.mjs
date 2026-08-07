@@ -88,19 +88,31 @@ async function go(page, chon, giaTri, { lan = 3 } = {}) {
  * Ném lỗi kèm hướng dẫn nếu rơi vào giao diện mới (vì hộp thoại xác nhận
  * dùng shadow DOM đóng, chưa bấm được bằng code — xem điều 1 ở đầu file).
  */
-export async function vaoFormCu(page) {
-  if (/\/ship\/guided\//.test(page.url())) return { ok: true, page, daSan: true };
+export async function vaoFormCu(page, { batBuocMoi = false } = {}) {
+  /* `batBuocMoi` = bỏ shipment đang dở, mở một cái MỚI (`tx` mới).
+   * 🔴 Cần cho đường thử lại: URL mang `?tx=<mã phiên shipment>`. Nếu lần trước hỏng giữa
+   *    chừng thì chính `tx` đó đã hỏng — dùng lại nó thì lần nào cũng chết đúng chỗ cũ.
+   *    (Đo 08/08: retry tái dùng `tx` cũ -> cả 3 lần cùng timeout một chỗ.) */
+  if (!batBuocMoi && /\/ship\/guided\//.test(page.url())) return { ok: true, page, daSan: true };
 
   /* 🔴 Nút "Create a Shipment" trên dashboard mở TAB MỚI (`target=_blank`).
    *    Trang cũ ở lại dashboard -> mọi thao tác sau đó tác động NHẦM TRANG và timeout
    *    một cách khó hiểu (gặp 08/08). Phải bắt tab mới rồi làm việc trên nó.
    *    Vì vậy hàm này TRẢ VỀ `page` — bên gọi phải dùng trang trả về, không dùng lại
    *    trang đã truyền vào. */
-  if (!/\/ship\b/.test(page.url())) {
+  if (batBuocMoi || !/\/ship\b/.test(page.url())) {
     await page.goto(DASHBOARD, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await page.waitForTimeout(12000);
-    const nut = page.locator('a', { hasText: /Create a Shipment/i }).first();
-    if (!await nut.count()) throw new Error('UPS: khong thay nut "Create a Shipment" tren dashboard — con phien khong?');
+    /* 🔴 Dashboard co BA link "Create a Shipment", HAI cai DAU BI AN.
+     *    `.first()` bat phai cai an -> click timeout (gap 08/08). Lay cai NHIN THAY DUOC.
+     *    Day la lan thu tu du an gap ho bay nay: 2 nut Continue o Auth0, 2 the trung id
+     *    #go-back-to-previous-experience-btn, 3 phan tu "Go" tren DSM. */
+    const dsNut = page.locator('a', { hasText: /Create a Shipment/i });
+    let nut = null;
+    for (let i = 0; i < await dsNut.count(); i++) {
+      if (await dsNut.nth(i).isVisible().catch(() => false)) { nut = dsNut.nth(i); break; }
+    }
+    if (!nut) throw new Error('UPS: khong thay link "Create a Shipment" NHIN THAY DUOC tren dashboard — con phien khong?');
     const ctx = page.context();
     const [moi] = await Promise.all([
       ctx.waitForEvent('page', { timeout: 40000 }).catch(() => null),
@@ -398,3 +410,106 @@ export async function dienThanhToan(page, { soTaiKhoan, zip } = TT_TRA_TIEN) {
 }
 
 export { O as O_UPS, P as O_PACKAGE, REF as O_REF, H as O_PICKUP, PAY as O_PAY };
+
+
+/* ==========================================================================
+ *  CHẠY TRỌN Mục 1 → Review, tự thử lại khi gặp 250002
+ * ======================================================================== */
+
+/** Phiên UPS còn sống không? Dựa vào dashboard, KHÔNG đụng `/lasso/login`. */
+export async function conPhien(page) {
+  const cu = page.url();
+  await page.goto(DASHBOARD, { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => {});
+  await page.waitForTimeout(12000);
+  const r = await page.evaluate(() => ({ url: location.href, tt: document.title }));
+  const song = !/Access Denied/i.test(r.tt) && !/\/lasso\/(login|error)/.test(r.url);
+  return { song, url: r.url.slice(0, 80), tt: r.tt.slice(0, 40), truoc: cu };
+}
+
+/**
+ * Điền trọn Mục 1 → Review cho MỘT đơn Ground. **DỪNG trước `Pay and Get Label(s)`.**
+ *
+ * Tự thử lại khi Review trả `250002`.
+ *
+ * 🔴 NHƯNG KHÔNG THỬ LẠI MÙ QUÁNG. Đo 07–08/08: `250002` có `description` là
+ *    **"Invalid Authentication Information"**, tức **PHIÊN ĐÃ HẾT HẠN**. Phiên chết thì
+ *    tải lại trang và làm lại từ đầu sẽ hỏng y hệt — chỉ tốn request và làm Akamai hạ
+ *    điểm tín nhiệm, đúng thứ đã khoá `/lasso/login` cả ngày 07/08.
+ *    → Trước mỗi lần thử lại, `conPhien()` kiểm dashboard. Phiên chết thì **DỪNG NGAY**
+ *      và báo cách khắc phục, không lặp.
+ *
+ * @param don {noiNhan, kien, pickup, laKhachLe}
+ * @returns { ok, page, lan, daDien } — hoặc ném lỗi kèm lý do rõ ràng
+ */
+export async function chayFormUps(page, don, { lanToiDa = 3, log = () => {} } = {}) {
+  if (typeof don.laKhachLe !== 'boolean') {
+    throw new Error('chayFormUps: phai truyen ro laKhachLe (true = khach le, false = store)');
+  }
+  let loiCuoi = null;
+
+  for (let lan = 1; lan <= lanToiDa; lan++) {
+    log(`--- lan ${lan}/${lanToiDa} ---`);
+    let ma250002 = false;
+    const nghe = async r => {
+      if (!/ValidateAccounts|UpdateShippingContext/.test(r.url())) return;
+      try { if (/"250002"/.test(await r.text())) ma250002 = true; } catch { /* bo qua */ }
+    };
+
+    try {
+      /* LUON mo shipment MOI — ke ca lan dau. Trang co the dang o bat ky trang thai nao
+       * (Review cua lan chay truoc, form dien do...), tai dung lai la chet kho hieu. */
+      const v = await vaoFormCu(page, { batBuocMoi: true });
+      page = v.page;                       // vaoFormCu co the tra ve TAB MOI
+      page.on('response', nghe);
+
+      log('Muc 1 Where');   const noiNhan = await dienNoiNhan(page, don.noiNhan);
+      log('residential');   await xacNhanResidential(page, don.laKhachLe);
+      log('Muc 2 What');    const kien = await dienPackage(page, 0, don.kien);
+      await page.locator(O.tiepTuc).click({ timeout: 25000 }); await page.waitForTimeout(26000);
+      log('Muc 3 How');     const pickup = await dienPickup(page, don.pickup);
+      await page.locator(O.tiepTuc).click({ timeout: 25000 }); await page.waitForTimeout(26000);
+      log('Muc 4 Details'); await page.locator(O.tiepTuc).click({ timeout: 25000 }); await page.waitForTimeout(26000);
+      log('Muc 5 Payment'); const traTien = await dienThanhToan(page);
+      log('Review');
+      await page.locator(PAY.review).click({ timeout: 25000 });
+      await page.waitForTimeout(34000);
+
+      const kq = await page.evaluate(() => ({
+        url: location.href,
+        loi: (document.body.innerText.match(/Please correct the following:[\s\S]{0,120}/) || [''])[0].replace(/\s+/g, ' '),
+        coNutTra: [...document.querySelectorAll('button')]
+          .some(e => e.offsetParent && /pay and get label/i.test(e.innerText || ''))
+      }));
+      page.off('response', nghe);
+
+      if (kq.coNutTra && !kq.loi) {
+        return { ok: true, page, lan, daDien: { noiNhan, kien, pickup, traTien }, url: kq.url };
+      }
+      loiCuoi = kq.loi || 'khong thay nut "Pay and Get Label(s)"';
+    } catch (e) {
+      page.off('response', nghe);
+      loiCuoi = e.message.split('\n')[0];
+    }
+
+    log(`that bai: ${String(loiCuoi).slice(0, 90)}`);
+    if (lan === lanToiDa) break;
+
+    if (ma250002) {
+      /* 250002 co HAI nguyen nhan khac han nhau, phai phan biet:
+       *  - phien DANG NHAP chet   -> thu lai vo ich, chi ton request va lam Akamai ha diem
+       *  - `tx` shipment hong     -> mo shipment MOI la xong (batBuocMoi o vong sau) */
+      const ph = await conPhien(page);
+      if (!ph.song) {
+        throw new Error(
+          'UPS: loi 250002 = "Invalid Authentication Information" VA phien DANG NHAP da chet ' +
+          `(${ph.tt} @ ${ph.url}). Thu lai se hong y het — DUNG. ` +
+          'Khac phuc: dang nhap tren may nguoi dung -> DevTools > Network > Copy as cURL -> ' +
+          'nap header Cookie vao 11_TaiVe/.profile-ground. Xem 7_QuyTrinh_Ground_UPS.md.');
+      }
+      log('250002 nhung phien dang nhap VAN SONG -> `tx` hong, mo shipment MOI');
+    }
+    await page.waitForTimeout(8000);
+  }
+
+  throw new Error(`UPS: that bai sau ${lanToiDa} lan. Loi cuoi: ${loiCuoi}`);
+}
