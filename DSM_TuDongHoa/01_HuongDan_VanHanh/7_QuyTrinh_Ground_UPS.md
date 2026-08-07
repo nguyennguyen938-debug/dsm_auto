@@ -392,3 +392,48 @@ kiểm phiên còn sống không.** Đây là lần thứ ba trong ngày kết l
 triệu chứng — hai lần trước là đổ cho IP datacenter và cho rằng có lối đăng nhập khác.
 
 ⚠️ Tài khoản **gửi** thì đã chốt: **để nguyên mặc định** (`1741XG`), không đụng vào.
+
+
+---
+
+## ✅ CHẠY THÔNG MỤC 1 → REVIEW (08/08/2026)
+
+Chạy thật, dừng đúng trước `Pay and Get Label(s)`:
+
+```
+Muc 1 Where     THD TEST RECIPIENT · 1234 MAIN ST · AUSTIN TX 78701 · 5125551234
+residential     Yes
+Muc 2 What      qty 1 · 31 lb · 26x26x3 · Reference #1 = 02562579
+Muc 3 How       8/11/2026 · 1:00 PM–5:00 PM · Warehouse · ref 02562579 · UPS Ground
+Muc 5 Payment   Third Party · 12C8D2 · 92571
+Review          KHONG CO LOI -> hien nut "Pay and Get Label(s)"
+
+ValidateAccounts       -> {"isValid":true,"errors":[]}
+UpdateShippingContext  -> {"isValid":true}
+```
+
+🔴 **`12C8D2` / `92571` HỢP LỆ.** Lỗi `250002` hôm 07/08 là do **phiên UPS hết hạn**,
+không phải sai tài khoản — người dùng đã phản bác đúng.
+
+### Cách vượt qua chặn Akamai ở `/lasso/login`
+
+Akamai chặn **riêng trang đăng nhập** với trình duyệt trên VM (profile mới, Firefox,
+bỏ CDP — thử hết đều chặn; `curl` không cookie thì `302` bình thường).
+**Cách đi vòng đã kiểm chứng:** người dùng đăng nhập trên máy mình → DevTools ▸ Network ▸
+`Copy as cURL` → tách header `Cookie:` → nạp vào `.profile-ground` trên VM.
+
+Hai điều đo được:
+- **Phiên UPS KHÔNG ràng buộc theo IP** — cookie tạo ở IP nhà dùng tốt trên IP Google Cloud
+- Có phiên rồi thì **không bao giờ chạm `/lasso/login`**, nên chặn kia thành vô hại
+
+### Ba bẫy khi tự động chuyển về giao diện cũ
+
+1. Nút **`Create a Shipment` mở TAB MỚI** — trang cũ ở lại dashboard, mọi thao tác sau đó
+   tác động nhầm trang rồi timeout khó hiểu. `vaoFormCu()` bắt tab mới và **trả về `page`**;
+   bên gọi PHẢI dùng trang trả về.
+2. Nút xác nhận ghi **"Return to Previous Experience"** (`#prevExperience`), KHÔNG phải
+   Yes/No. Bản trước ghi "shadow DOM đóng, không bấm được bằng code" — **SAI**, do tìm
+   nhầm chữ và bắt nhầm sang hộp *"Are you sure you want to cancel?"*.
+   Trang có **rất nhiều `[role=dialog]` dựng sẵn** — phải lọc theo NỘI DUNG.
+3. `locator.click()` kể cả `force:true` **vẫn rơi vào lớp phủ** của hộp thoại, handler
+   không chạy. Phải gọi `el.click()` bằng JS.

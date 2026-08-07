@@ -7,11 +7,12 @@
  *  🔴 SÁU ĐIỀU BẮT BUỘC — đo thật 07/08/2026:
  *
  *  1. **DÙNG GIAO DIỆN CŨ** (người dùng chốt 07/08). `ups.com/ship` nay mở giao diện MỚI
- *     (5 mục dồn một trang). Phải bấm `button#go-back-to-previous-experience-btn` rồi
- *     xác nhận **Yes** để về `/ship/guided/destination`.
- *     ⛔ Hộp thoại xác nhận dùng **shadow DOM đóng** — `querySelectorAll`, `getByRole`,
- *        `getByText` đều KHÔNG thấy nút Yes. **Chưa bấm được bằng code, phải bấm tay
- *        trong VNC.** `vaoFormCu()` dừng và báo rõ khi gặp.
+ *     (5 mục dồn một trang). `vaoFormCu()` tự chuyển: bấm
+ *     `button#go-back-to-previous-experience-btn` rồi `button#prevExperience` trong hộp
+ *     xác nhận -> về `/ship/guided/destination`.
+ *     ⚠️ Trang có RẤT NHIỀU `[role=dialog]` dựng sẵn trong DOM (Shipping Assistant, Find a
+ *        Location, Timed Out, Take a Tour…). **Phải lọc hộp theo NỘI DUNG**, lấy cái đầu
+ *        tiên là bắt nhầm sang hộp "Are you sure you want to cancel?".
  *
  *  2. URL chứa `?tx=<mã phiên>` — **KHÔNG hard-code**, luôn đi từ dashboard vào.
  *
@@ -88,21 +89,57 @@ async function go(page, chon, giaTri, { lan = 3 } = {}) {
  * dùng shadow DOM đóng, chưa bấm được bằng code — xem điều 1 ở đầu file).
  */
 export async function vaoFormCu(page) {
-  if (/\/ship\/guided\//.test(page.url())) return { ok: true, daSan: true };
+  if (/\/ship\/guided\//.test(page.url())) return { ok: true, page, daSan: true };
 
-  await page.goto(DASHBOARD, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await page.waitForTimeout(12000);
-  const nut = page.locator('a', { hasText: /Create a Shipment/i }).first();
-  if (!await nut.count()) throw new Error('UPS: khong thay nut "Create a Shipment" tren dashboard — con phien khong?');
-  await nut.click({ timeout: 25000 });
-  await page.waitForTimeout(25000);
+  /* 🔴 Nút "Create a Shipment" trên dashboard mở TAB MỚI (`target=_blank`).
+   *    Trang cũ ở lại dashboard -> mọi thao tác sau đó tác động NHẦM TRANG và timeout
+   *    một cách khó hiểu (gặp 08/08). Phải bắt tab mới rồi làm việc trên nó.
+   *    Vì vậy hàm này TRẢ VỀ `page` — bên gọi phải dùng trang trả về, không dùng lại
+   *    trang đã truyền vào. */
+  if (!/\/ship\b/.test(page.url())) {
+    await page.goto(DASHBOARD, { waitUntil: 'domcontentloaded', timeout: 90000 });
+    await page.waitForTimeout(12000);
+    const nut = page.locator('a', { hasText: /Create a Shipment/i }).first();
+    if (!await nut.count()) throw new Error('UPS: khong thay nut "Create a Shipment" tren dashboard — con phien khong?');
+    const ctx = page.context();
+    const [moi] = await Promise.all([
+      ctx.waitForEvent('page', { timeout: 40000 }).catch(() => null),
+      nut.click({ timeout: 25000 })
+    ]);
+    if (moi) { page = moi; await page.waitForLoadState('domcontentloaded').catch(() => {}); }
+    await page.waitForTimeout(25000);
+  }
 
-  if (/\/ship\/guided\//.test(page.url())) return { ok: true, daSan: false };
+  if (/\/ship\/guided\//.test(page.url())) return { ok: true, page, daSan: false };
 
-  throw new Error(
-    'UPS mo GIAO DIEN MOI (' + page.url().slice(0, 70) + '). Phai chuyen ve giao dien cu, ' +
-    'nhung hop thoai xac nhan dung SHADOW DOM DONG nen KHONG bam duoc bang code. ' +
-    '-> Vao VNC bam tay: nut "Go to Previous Experience" roi bam "Yes". Xong chay lai.');
+  /* Rơi vào GIAO DIỆN MỚI -> chuyển về giao diện cũ.
+   *
+   * 🔴 Bản trước ghi "hộp thoại xác nhận dùng shadow DOM đóng, không bấm được bằng code".
+   *    SAI — sửa 08/08. Hai chỗ tôi nhầm:
+   *      · tìm nút chữ "Yes"/"No", trong khi nút thật ghi "Return to Previous Experience"
+   *      · bắt nhầm sang hộp "Are you sure you want to cancel?" (trang có RẤT NHIỀU
+   *        `[role=dialog]` ẩn sẵn trong DOM — phải lọc theo NỘI DUNG, không lấy cái đầu)
+   *    Nút thật: `button#prevExperience`, nằm ngay trong DOM thường. */
+  // Bấm thẳng theo id — lồng locator qua `[role=dialog]` bị treo (Playwright coi hộp là
+  // chưa ổn định). Kiểm nội dung hộp riêng để chắc đúng hộp, rồi bấm nút bằng id.
+  const timHop = () => page.locator('button#prevExperience');
+  // Hộp có thể ĐANG MỞ SẴN (lần chạy trước bỏ dở). Lúc đó nó CHE mất nút bên dưới,
+  // bấm nút sẽ timeout — nên kiểm hộp trước, có rồi thì dùng luôn.
+  if (!await timHop().count()) {
+    await page.locator('button#go-back-to-previous-experience-btn').click({ timeout: 25000 });
+    await page.waitForTimeout(9000);
+  }
+  const dungHop = await page.evaluate(() => [...document.querySelectorAll('[role=dialog]')]
+    .some(e => /return to the previous shipping experience/i.test(e.innerText || '')));
+  if (!dungHop) throw new Error('UPS: khong thay hop xac nhan doi giao dien');
+  /* Bấm bằng JS: `click()` của Playwright — kể cả `force:true` — vẫn rơi vào lớp phủ của
+   * hộp thoại nên handler không chạy (đo 08/08: bấm xong hộp vẫn mở nguyên).
+   * `el.click()` gọi thẳng handler, không qua hit-test. */
+  await page.evaluate(() => document.getElementById('prevExperience')?.click());
+  await page.waitForTimeout(26000);
+
+  if (/\/ship\/guided\//.test(page.url())) return { ok: true, page, daSan: false, daChuyen: true };
+  throw new Error('UPS: da bam "Return to Previous Experience" nhung van o ' + page.url().slice(0, 70));
 }
 
 /**
