@@ -320,4 +320,44 @@ export async function dienPickup(page, { ngay, po }) {
   }, H);
 }
 
-export { O as O_UPS, P as O_PACKAGE, REF as O_REF, H as O_PICKUP };
+/* --- Mục 5 "Payment" --- */
+const PAY = {
+  oBillOther:  'label[for="bill-someone-else-tile"]',                        // ô "Bill Other Account"
+  thirdParty:  'input#nbsBillSomeoneElsePaymentMethodRadioList1',            // "Third Party"
+  soTaiKhoan:  'input#nbsPaymentAccountTransportationThirdPartyAccountNumberInput',
+  zip:         'input#nbsPaymentAccountTransportationThirdPartyPostalCodeInput',
+  luuTaiKhoan: 'input#nbsBillSomeoneElseSaveAccountSwitch',                  // để NGUYÊN (không lưu)
+  review:      'button#nbsBackForwardNavigationReviewPrimaryButton'
+};
+
+/** Hằng số cố định của AllForWood — tài liệu ghi "LUÔN". */
+export const TT_TRA_TIEN = { soTaiKhoan: '12C8D2', zip: '92571' };
+
+/**
+ * Mục 5 — Payment. `Bill Other Account` + `Third Party` **mặc định đã tích sẵn**
+ * (xác nhận 07/08), hàm vẫn kiểm lại chứ không tin.
+ *
+ * ⚠️ Tài khoản gửi có HAI lựa chọn: `1741XB` và `1741XG` (đang mặc định `1741XG`).
+ *    Tài liệu KHÔNG nói dùng cái nào -> hàm này **không đụng vào**, giữ nguyên mặc định.
+ *    Cần người dùng chốt.
+ *
+ * ⛔ Hàm DỪNG ở nút **Review**. KHÔNG bấm `Pay and Get Label(s)` —
+ *    đó mới là lúc UPS tạo shipment thật và tính tiền.
+ */
+export async function dienThanhToan(page, { soTaiKhoan, zip } = TT_TRA_TIEN) {
+  const tp = page.locator(PAY.thirdParty);
+  if (!await tp.count()) throw new Error('UPS Muc 5: khong thay lua chon "Third Party"');
+  if (!await tp.isChecked()) { await tp.check({ force: true }); await page.waitForTimeout(5000); }
+
+  await go(page, PAY.soTaiKhoan, soTaiKhoan);
+  await go(page, PAY.zip,        zip);
+
+  return page.evaluate(x => {
+    const v = s => (document.querySelector(s) || {}).value ?? null;
+    const c = s => !!(document.querySelector(s) || {}).checked;
+    return { thirdParty: c(x.thirdParty), soTaiKhoan: v(x.soTaiKhoan), zip: v(x.zip),
+             luuTaiKhoan: c(x.luuTaiKhoan) };
+  }, PAY);
+}
+
+export { O as O_UPS, P as O_PACKAGE, REF as O_REF, H as O_PICKUP, PAY as O_PAY };
