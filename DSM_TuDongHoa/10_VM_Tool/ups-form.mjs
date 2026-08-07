@@ -45,17 +45,41 @@ const O = {
   moRongDiaChi:   'button#destination-singleLineAddressEditButton',
   suaKhoGui:      'button#nbsDestinationPageEditOriginAndReturnButton',
   tiepTuc:        'button#nbsBackForwardNavigationContinueButton',
-  huy:            'button#nbsBackForwardNavigationCancelShipmentButton'
+  huy:            'button#nbsBackForwardNavigationCancelShipmentButton',
+
+  /* Hộp "Please tell us a little more about your destination address."
+   * 🔴 `id` CHỨA DẤU CHẤM — `#vm.residentialAddressControlId` bị CSS hiểu thành
+   *    id `vm` + class `residentialAddressControlId`, KHÔNG khớp gì cả.
+   *    Bắt buộc dùng bộ chọn thuộc tính. */
+  residential:    'input[id="vm.residentialAddressControlId"]',
+  residentialOK:  'button#nbsAddressClassificationContinue'
 };
 
 const DASHBOARD = 'https://www.ups.com/ppc/dashboard.html?loc=en_US#/companyDashboard';
 
-/** Gõ như người — form Angular của UPS không phải lúc nào cũng nhận `fill()`. */
-async function go(page, chon, giaTri) {
+/**
+ * Gõ vào một ô rồi **ĐỌC LẠI KIỂM**, sai thì gõ lại (tối đa 3 lần).
+ *
+ * 🔴 VÌ SAO PHẢI KIỂM — bằng chứng thật 07/08/2026:
+ *    Điền `128` vào ô Weight, đọc lại ra **`8`** — mất hai chữ số đầu. Gõ lại bằng cả 4
+ *    cách (pressSequentially 45ms/200ms, fill(), keyboard.type) thì đều ra `128`, tức
+ *    KHÔNG phải lỗi cách gõ mà là **đua tranh với Angular**: form đang dựng lại thì
+ *    ký tự đầu rơi mất. Ghi một lần rồi tin là sai — cân nặng `128` thành `8` sẽ
+ *    tạo shipping label sai mà không ai biết.
+ *    (Cùng bài học với `_ghiText_()` bên Apps Script: ghi → flush → ĐỌC LẠI → sửa.)
+ */
+async function go(page, chon, giaTri, { lan = 3 } = {}) {
   const o = page.locator(chon).first();
-  await o.click();
-  await o.fill('');
-  if (giaTri) await o.pressSequentially(String(giaTri), { delay: 45 });
+  const mong = giaTri === undefined || giaTri === null ? '' : String(giaTri);
+  for (let i = 0; i < lan; i++) {
+    await o.click();
+    await o.fill('');
+    if (mong) await o.pressSequentially(mong, { delay: 45 });
+    await page.waitForTimeout(1200);
+    if ((await o.inputValue()) === mong) return mong;
+  }
+  const that = await o.inputValue();
+  throw new Error(`UPS: o "${chon}" ghi ${lan} lan van khong dung — muon "${mong}", dang "${that}"`);
 }
 
 /**
@@ -126,6 +150,43 @@ export async function dienNoiNhan(page, don) {
   return docLaiNoiNhan(page);
 }
 
+/**
+ * Bấm Continue ở Mục 1, rồi trả lời hộp "Is this a residential address?".
+ *
+ * 🔴 Đó KHÔNG phải radio Yes/No mà là **công tắc gạt**: một `<input type=checkbox>` ẩn,
+ *    hai chữ Yes/No chỉ là nhãn trang trí (`.ups-lever_switch_yes/_no`).
+ *    Đã CHỤP ẢNH cả hai trạng thái để xác minh, không suy đoán:
+ *        checked = false -> hiện **No**  (mặc định)
+ *        checked = true  -> hiện **Yes**
+ *    Tài liệu: `Yes` nếu khách lẻ, `No` nếu store.
+ *
+ * @param laKhachLe true = khách lẻ (residential), false = store
+ */
+export async function xacNhanResidential(page, laKhachLe) {
+  if (typeof laKhachLe !== 'boolean') {
+    throw new Error('xacNhanResidential: phai truyen ro true (khach le) hay false (store)');
+  }
+  await page.locator(O.tiepTuc).click({ timeout: 25000 });
+  await page.waitForTimeout(18000);
+
+  const cong = page.locator(O.residential);
+  if (!await cong.count()) {
+    throw new Error('UPS: bam Continue xong khong thay hop "Is this a residential address?". ' +
+                    `Dang o: ${page.url().slice(0, 80)}`);
+  }
+  // force: input bi che boi lop trang tri nen Playwright coi la khong nhin thay
+  if (laKhachLe) await cong.check({ force: true });
+  else           await cong.uncheck({ force: true });
+  await page.waitForTimeout(2500);
+
+  const that = await cong.isChecked();
+  if (that !== laKhachLe) throw new Error(`UPS: dat cong tac residential that bai (muon ${laKhachLe}, dang ${that})`);
+
+  await page.locator(O.residentialOK).click({ timeout: 25000 });
+  await page.waitForTimeout(20000);
+  return { residential: that, url: page.url() };
+}
+
 /** Đọc lại những gì vừa điền — để đối chiếu trước khi bấm Continue. */
 export async function docLaiNoiNhan(page) {
   return page.evaluate(o => {
@@ -136,4 +197,66 @@ export async function docLaiNoiNhan(page) {
   }, O);
 }
 
-export { O as O_UPS };
+/* --- Mục 2 "What": mỗi SKU = MỘT package. Hậu tố số = chỉ số package (0,1,2...) --- */
+const P = i => ({
+  loaiThung:  `select#nbsPackagePackagingTypeDropdown0`.replace('0', i),   // Packaging Type
+  soKien:     `select#nbsMultipleIdenticalPackagesDropdown${i}`,           // Total Identical Packages
+  canNang:    `input#nbsPackagePackageWeightField${i}`,                    // Weight per Package
+  dai:        `input#nbsPackagePackageLengthField${i}`,
+  rong:       `input#nbsPackagePackageWidthField${i}`,
+  cao:        `input#nbsPackagePackageHeightField${i}`,
+  giaTri:     `input#nbsPackageDeclaredValueField${i}`                     // Total Package Value — ĐỂ TRỐNG
+});
+const REF = {
+  bat:  'input#nbsReferenceNumbersBaseOptionSwitch',   // "Add reference numbers" — công tắc gạt
+  ref1: 'input#nbsReferenceNumberReference1',          // Reference #1 = số PO
+  ref1MoiKien: 'input#nbsReference1CheckboxAllPackages'
+};
+
+/**
+ * Mục 2 — What: điền một package.
+ *
+ * Tài liệu: **mỗi SKU = MỘT package**; đơn nhiều SKU thì bấm *Add Another Package*.
+ *   Total Identical Packages = Qty Shipped của SKU đó
+ *   Weight per Package       = `Carton Weight (lb)` trong `dims_sku.csv` — **KHÔNG cộng 55**
+ *                              (55 là pallet của đơn Misc; Ground đi UPS từng thùng lẻ)
+ *   Length/Width/Height      = `Carton Len/Wid/Hgt (in)` cùng file
+ *   Total Package Value      = ĐỂ TRỐNG
+ *   Reference #1             = số PO
+ *
+ * ⚠️ `Reference #1` chỉ hiện khi công tắc **"Add reference numbers"** đang bật.
+ * ⚠️ `traDims()` ném lỗi nếu số liệu = 0 — 125/523 SKU trong file vẫn để 0.
+ *    **Đừng bao giờ gửi 0 lên UPS.**
+ */
+export async function dienPackage(page, i, kien) {
+  const o = P(i);
+  for (const k of ['soKien', 'canNang', 'dai', 'rong', 'cao']) {
+    const v = { soKien: kien.qty, canNang: kien.lb, dai: kien.L, rong: kien.W, cao: kien.H }[k];
+    if (v === undefined || v === null || v === '' || Number(v) === 0) {
+      throw new Error(`dienPackage[${i}]: "${k}" khong hop le (${v}). Khong gui 0 len UPS.`);
+    }
+  }
+  // 🔴 value cua option la dang Angular "501: 2", KHONG phai "2" -> chon theo NHAN.
+  await page.selectOption(o.soKien, { label: String(kien.qty) });
+  await go(page, o.canNang, kien.lb);
+  await go(page, o.dai,     kien.L);
+  await go(page, o.rong,    kien.W);
+  await go(page, o.cao,     kien.H);
+  // Total Package Value: cố ý KHÔNG điền
+
+  if (kien.po) {
+    const bat = page.locator(REF.bat);
+    if (await bat.count() && !await bat.isChecked()) {
+      await bat.check({ force: true });
+      await page.waitForTimeout(3000);
+    }
+    await go(page, REF.ref1, kien.po);
+  }
+  return page.evaluate(x => {
+    const v = s => (document.querySelector(s) || {}).value ?? null;
+    return { soKien: v(x.o.soKien), canNang: v(x.o.canNang), dai: v(x.o.dai),
+             rong: v(x.o.rong), cao: v(x.o.cao), giaTri: v(x.o.giaTri), ref1: v(x.ref1) };
+  }, { o, ref1: REF.ref1 });
+}
+
+export { O as O_UPS, P as O_PACKAGE, REF as O_REF };
