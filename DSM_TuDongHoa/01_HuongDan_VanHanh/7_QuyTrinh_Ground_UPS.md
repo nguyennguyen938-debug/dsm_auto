@@ -371,10 +371,24 @@ Tức UPS **không xác thực được cặp số tài khoản + ZIP của bên
 - ❌ *Không* phải do ô Country — nó vẫn đang `United States`, không phải `Select One`.
 - ✅ `/api/Session/UpdateShippingContext` trả `isValid:true` — Mục 1–4 hợp lệ.
 
-**Chưa biết, cần người dùng chốt:**
-1. `12C8D2` có đúng là số tài khoản UPS còn hiệu lực không? Ô ghi *"6- or 9-character
-   alphanumeric code"* nên độ dài 6 là hợp lệ.
-2. ZIP `92571` có khớp đúng với tài khoản đó không? Ô ghi *"Must match account"*.
-3. Tài khoản bên thứ ba có cần được cấp quyền trước khi dùng để tính cước không?
+### ⛔ SỬA LẠI — KẾT LUẬN TRÊN LÀ SAI (cùng ngày)
+
+Người dùng phản bác: *"những lần mới đây nhất tôi dùng thì vẫn làm được bình thường và
+bây giờ vẫn vậy."* Kiểm lại thì **người dùng đúng**.
+
+**PHIÊN UPS ĐÃ HẾT HẠN** trong lúc khảo sát — tab rơi về `/lasso/login` và Akamai trả
+`Access Denied`; cookie `auth0` (hạn ~5 tiếng) đã hết.
+
+Mà thông điệp lỗi là **`"Invalid Authentication Information"`** — đọc đúng nghĩa đen thì
+đó là **lỗi xác thực PHIÊN**, không phải lỗi số tài khoản. Tôi thấy nó nằm trong
+`ValidateAccounts` rồi gán bừa cho `12C8D2`.
+
+→ **`12C8D2` / `92571` chưa có bằng chứng nào là sai.** Giữ nguyên như tài liệu gốc.
+→ Phải chạy lại toàn bộ Mục 1→Review **với phiên còn sống** mới biết có qua được không.
+
+🔴 **BÀI HỌC**: mã lỗi hiện trên trang (`250002 - A general system error`) và mô tả trong
+API (`Invalid Authentication Information`) đều mơ hồ. **Trước khi đổ lỗi cho dữ liệu,
+kiểm phiên còn sống không.** Đây là lần thứ ba trong ngày kết luận vội về cùng một
+triệu chứng — hai lần trước là đổ cho IP datacenter và cho rằng có lối đăng nhập khác.
 
 ⚠️ Tài khoản **gửi** thì đã chốt: **để nguyên mặc định** (`1741XG`), không đụng vào.
