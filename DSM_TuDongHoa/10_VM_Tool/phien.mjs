@@ -54,6 +54,59 @@ export async function moContext({ headless = false } = {}) {
   });
 }
 
+/**
+ * Mở context bằng cách KHỞI CHẠY CHROME TRẦN rồi gắn qua CDP.
+ *
+ * 🔴 Vì sao phải có đường này bên cạnh `moContext()` — đo 07/08/2026:
+ *    Akamai của UPS chặn trình duyệt do **Playwright tự khởi chạy** (`Access Denied`
+ *    trên `/lasso/login`), kể cả khi đã xoá cookie `_abck`. Cùng profile đó, khởi chạy
+ *    chrome trần rồi `connectOverCDP` thì VÀO ĐƯỢC. Playwright thêm một loạt cờ
+ *    (`--enable-automation`, `--disable-popup-blocking`, …) mà Akamai nhận ra.
+ *    Lecangs/AACT không quan tâm — chỉ UPS mới cần đường này.
+ *
+ * ⚠️ `ctx.close()` KHÔNG tắt chrome (mình không khởi chạy nó qua Playwright).
+ *    Dùng `ket.dong()` để tắt đúng PID.
+ */
+export async function moContextCDP({ cong = 9222 } = {}) {
+  if (!await coManHinh()) throw new Error(`khong co man hinh ${MAN_HINH} — chay "10_VM_Tool/vnc.sh bat" truoc`);
+  const { execFile, spawn } = await import('node:child_process');
+  const os = await import('node:os');
+
+  const ds = await fs.readdir(path.join(os.homedir(), '.cache', 'ms-playwright'));
+  const thuMuc = ds.filter(d => d.startsWith('chromium-')).sort().pop();
+  if (!thuMuc) throw new Error('khong thay chromium cua playwright');
+  const CHROME = path.join(os.homedir(), '.cache', 'ms-playwright', thuMuc, 'chrome-linux64', 'chrome');
+
+  // brunhild.challenges.cloudflare.com CHI co ban ghi AAAA ma VM khong co IPv6.
+  // Ep no ve IPv4 cua Cloudflare, khong thi Turnstile bao ERR_ADDRESS_UNREACHABLE.
+  let ip4 = '';
+  try {
+    const dns = await import('node:dns/promises');
+    ip4 = (await dns.resolve4('challenges.cloudflare.com'))[0] || '';
+  } catch { /* khong sao, chi mat mot nguyen nhan */ }
+
+  await fs.rm(path.join(PROFILE, 'SingletonLock'), { force: true }).catch(() => {});
+  const cha = spawn(CHROME, [
+    `--user-data-dir=${PROFILE}`, '--no-first-run', '--no-default-browser-check',
+    `--remote-debugging-port=${cong}`, '--window-size=1500,950',
+    ...(ip4 ? [`--host-resolver-rules=MAP brunhild.challenges.cloudflare.com ${ip4}`] : []),
+    'about:blank'
+  ], { detached: true, stdio: 'ignore', env: { ...process.env, DISPLAY: MAN_HINH } });
+  cha.unref();
+
+  const { chromium } = await import('playwright');
+  let b = null;
+  for (let i = 0; i < 30 && !b; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    b = await chromium.connectOverCDP(`http://127.0.0.1:${cong}`).catch(() => null);
+  }
+  if (!b) { try { process.kill(cha.pid); } catch {} throw new Error('chrome khong len CDP sau 60s'); }
+
+  const ctx = b.contexts()[0];
+  return { ctx, page: ctx.pages()[0] || await ctx.newPage(), pid: cha.pid,
+           dong: async () => { await b.close().catch(() => {}); try { process.kill(cha.pid); } catch {} } };
+}
+
 /* --------------------------------------------------------------- Lecangs ---- */
 
 const LEC_TRANG_CHU = 'https://app.lecangs.com/oms/inventory';

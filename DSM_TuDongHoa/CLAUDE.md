@@ -251,20 +251,31 @@ Dùng `chromium.launchPersistentContext('11_TaiVe/.profile-ground', {...})`.
 🔴 **UPS BẮT BUỘC chạy headful trên Xvfb** — headless bị Akamai chặn (`ERR_HTTP2_PROTOCOL_ERROR`),
 đổi `userAgent` không cứu được. Lecangs và AACT thì headless vẫn chạy.
 
-🔴 **Trang đăng nhập UPS chặn PROFILE MỚI — đo 07/08/2026, headful trên `:99`:**
+🔴 **ĐĂNG NHẬP UPS TỰ ĐỘNG: KHÔNG LÀM ĐƯỢC — kết luận sau một buổi đo, 07/08/2026.**
 
-| URL | Profile mới tinh | `.profile-ground` |
+Trang đăng nhập **không ở `www.ups.com`**: `/lasso/login` chỉ 302 sang
+`id.ups.com/authorize` → `id.ups.com/u/login/identifier` (**Auth0 Universal Login**, 2 bước).
+
+Có **hai lớp chống bot**, phải qua cả hai:
+
+| Lớp | Triệu chứng | Đã thử |
 |---|---|---|
-| `ups.com/us/en/home` | ✅ vào được | ✅ |
-| `ups.com/lasso/login` | ❌ **Access Denied** (Akamai) | — |
-| `ppc/dashboard.html` | ❌ Access Denied (bị đẩy sang `/lasso/login`) | ✅ **vào thẳng dashboard** |
+| **Akamai** trên `www.ups.com` | `Access Denied` ở `/lasso/login` | Loại trừ được IP (curl kèm đủ header thì 302 bình thường), loại trừ headless, loại trừ `navigator.webdriver` (chrome trần + CDP vẫn bị). Thủ phạm là **cookie `_abck` bị đánh dấu bot** — xoá nhóm cookie Akamai thì vào được **một lúc**, dùng vài lần lại bị đánh dấu lại |
+| **Cloudflare Turnstile** trên `id.ups.com` | `input[name=captcha]` **rỗng**; bấm Continue thì trang **im lặng đứng yên, KHÔNG báo lỗi** | Turnstile có tải và chạy (`window.turnstile` tồn tại) nhưng không sinh token. Một nguyên nhân phụ: `brunhild.challenges.cloudflare.com` **chỉ có bản ghi AAAA** mà VM không có IPv6; ép về IPv4 bằng `--host-resolver-rules` thì hết lỗi mạng nhưng **token vẫn rỗng** |
 
-Vào trang chủ làm nóng trước (lấy đủ cookie `bm_sz` + `_abck`) **vẫn không cứu được**.
-Vì sao hai profile khác nhau thì **chưa rõ** — chưa kết luận.
-Hệ quả thực tế: **không dựng lại phiên UPS từ profile trắng bằng code được.**
-Mất `.profile-ground` là phải đăng nhập tay qua VNC.
-→ `layMaUps()` chỉ giúp khi UPS hỏi lại MFA **bên trong profile ấm**, không giúp dựng phiên từ đầu.
-→ **Backup `11_TaiVe/.profile-ground` là việc đáng làm.**
+⛔ **Không viết thêm gì để né Turnstile.** Đó là cơ chế chống bot của UPS.
+
+**Cách làm đang dùng:** đăng nhập tay qua VNC (người thật giải Turnstile) → phiên nằm trong
+`.profile-ground` → mọi việc còn lại tự động. `10_VM_Tool/ups-dangnhap.mjs` vẫn giữ, nó dừng
+sớm và báo đúng lớp nào chặn, kèm ảnh + JSON trong `11_TaiVe/logs/ups-b*.{png,json}`.
+
+→ `layMaUps()` **vẫn dùng được và vẫn cần** — cho lúc UPS hỏi lại MFA bên trong profile ấm.
+→ 🔴 **Mất `.profile-ground` là phải đăng nhập tay.** Đã sao lưu:
+   `11_TaiVe/.profile-ground-backup-<ngày>.tar.gz` (45 MB). **Nên sao lưu lại định kỳ.**
+
+⚠️ Còn một khác biệt chưa giải thích được: `moContext()` (Playwright tự khởi chạy) bị Akamai
+chặn, còn chrome trần + `connectOverCDP` thì có lần qua được — nên có thêm `moContextCDP()`.
+Nhưng sau nhiều lần thử, profile bị đánh dấu thì **cả hai đường đều chặn**.
 
 ### ✅ Đang chạy tự động, không cần ai
 
