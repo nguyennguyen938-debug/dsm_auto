@@ -58,6 +58,17 @@ const O = {
 
 const DASHBOARD = 'https://www.ups.com/ppc/dashboard.html?loc=en_US#/companyDashboard';
 
+/* --- Ship From: chọn kho gửi --- */
+const KHO = {
+  moSua:   'button#nbsDestinationPageEditOriginAndReturnButton',  // nút Edit canh "Ship From"
+  chon:    'select#origin-agent_myAddresses',                     // "My Addresses"
+  taiKhoan:'select#nbsShipperAccountListSwitcherOrigin',
+  tiepTuc: 'button#nbsBackForwardNavigationContinueButton'
+};
+
+/** So tên kho bỏ qua khác biệt `-` / khoảng trắng / hoa thường. */
+const chuanKho = t => String(t).toUpperCase().replace(/[\s_-]+/g, '');
+
 /**
  * Gõ vào một ô rồi **ĐỌC LẠI KIỂM**, sai thì gõ lại (tối đa 3 lần).
  *
@@ -134,6 +145,15 @@ export async function vaoFormCu(page, { batBuocMoi = false } = {}) {
    *    Nút thật: `button#prevExperience`, nằm ngay trong DOM thường. */
   // Bấm thẳng theo id — lồng locator qua `[role=dialog]` bị treo (Playwright coi hộp là
   // chưa ổn định). Kiểm nội dung hộp riêng để chắc đúng hộp, rồi bấm nút bằng id.
+  /* Giao dien MOI bat hop "Take a Tour of the Updated Shipping Experience" ngay khi vao,
+   * no CHE nut chuyen giao dien -> click timeout 25 s (gap 08/08). Dong no truoc. */
+  for (const ch of ['button#upsModal--close', 'button:has-text("Skip Tour")']) {
+    const n = page.locator(ch).first();
+    if (await n.count() && await n.isVisible().catch(() => false)) {
+      await n.click({ timeout: 8000 }).catch(() => {});
+      await page.waitForTimeout(3000);
+    }
+  }
   const timHop = () => page.locator('button#prevExperience');
   // Hộp có thể ĐANG MỞ SẴN (lần chạy trước bỏ dở). Lúc đó nó CHE mất nút bên dưới,
   // bấm nút sẽ timeout — nên kiểm hộp trước, có rồi thì dùng luôn.
@@ -409,7 +429,54 @@ export async function dienThanhToan(page, { soTaiKhoan, zip } = TT_TRA_TIEN) {
   }, PAY);
 }
 
-export { O as O_UPS, P as O_PACKAGE, REF as O_REF, H as O_PICKUP, PAY as O_PAY };
+/**
+ * Chọn **kho gửi** (Ship From) — mắt xích nối với `lecangs.chonKho()`.
+ *
+ * 🔴 BA ĐIỀU ĐO THẬT 08/08/2026:
+ *
+ *  1. Khi ĐÃ ĐĂNG NHẬP, shipment mới vào thẳng `/destination` (UPS tự dùng địa chỉ gửi
+ *     mặc định) — KHÔNG dừng ở `/origin`. Muốn đổi kho phải bấm nút **Edit** cạnh
+ *     "Ship From" (`#nbsDestinationPageEditOriginAndReturnButton`) để sang `/origin`.
+ *     (Khi CHƯA đăng nhập thì mới rơi vào `/origin` ở chế độ khách — không dùng được.)
+ *
+ *  2. Dropdown là `select#origin-agent_myAddresses` ("My Addresses"), có đúng 6 kho:
+ *     `Calhoun · CAP · HOU07 · MEM R · NJF02 · SAV` (+ `Enter New Address`,
+ *     `My Default Address`, `ALL FOR WOOD`).
+ *
+ *  3. ⚠️ **UPS ghi `MEM R` (DẤU CÁCH), `warehouse_ranking_by_state.csv` ghi `MEM-R`
+ *     (GẠCH NỐI).** So chuỗi thẳng sẽ trượt đúng một kho. `chuanKho()` bỏ qua khác biệt
+ *     này. Tài liệu ghi "Lecangs và UPS nay dùng tên giống nhau" — đúng với 5 kho kia.
+ *
+ * @param kho tên kho từ `lecangs.chonKho()`, ví dụ `NJF02` hoặc `MEM-R`
+ */
+export async function dienKhoGui(page, kho) {
+  if (!kho) throw new Error('dienKhoGui: thieu ten kho');
+
+  if (!/\/ship\/guided\/origin/.test(page.url())) {
+    await page.locator(KHO.moSua).click({ timeout: 25000 });
+    await page.waitForTimeout(16000);
+  }
+  const ds = page.locator(KHO.chon);
+  if (!await ds.count()) throw new Error('UPS: khong thay dropdown kho "My Addresses" o buoc Ship From');
+
+  const opts = await ds.evaluate(e => [...e.options].map(o => o.text.trim()));
+  const dung = opts.find(o => chuanKho(o) === chuanKho(kho));
+  if (!dung) {
+    throw new Error(`UPS: khong co kho "${kho}" trong danh sach. Co: ${JSON.stringify(opts)} ` +
+                    '-> DUNG va HOI NGUOI DUNG, khong chon bua.');
+  }
+  await page.selectOption(KHO.chon, { label: dung });
+  await page.waitForTimeout(9000);
+
+  const that = await ds.evaluate(e => e.selectedOptions[0]?.text.trim());
+  if (chuanKho(that) !== chuanKho(kho)) throw new Error(`UPS: chon kho that bai (muon ${kho}, dang ${that})`);
+
+  await page.locator(KHO.tiepTuc).click({ timeout: 25000 });
+  await page.waitForTimeout(24000);
+  return { kho: that, url: page.url() };
+}
+
+export { O as O_UPS, P as O_PACKAGE, REF as O_REF, H as O_PICKUP, PAY as O_PAY, KHO as O_KHO };
 
 
 /* ==========================================================================
@@ -456,12 +523,20 @@ export async function chayFormUps(page, don, { lanToiDa = 3, log = () => {} } = 
     };
 
     try {
+      /* 🔴 DON TAB THUA TRUOC. Moi lan mo shipment lai sinh mot tab moi ("Create a
+       * Shipment" co target=_blank). VM chi co 2 nhan / 4 GB — 13 tab UPS lam nghet
+       * CDP, `connectOverCDP` va `goto` deu timeout, va nguoi dung thay may lag han.
+       * (Gap 08/08 sau vai vong retry.) */
+      const ctx = page.context();
+      for (const t of ctx.pages()) if (t !== page) await t.close().catch(() => {});
+
       /* LUON mo shipment MOI — ke ca lan dau. Trang co the dang o bat ky trang thai nao
        * (Review cua lan chay truoc, form dien do...), tai dung lai la chet kho hieu. */
       const v = await vaoFormCu(page, { batBuocMoi: true });
       page = v.page;                       // vaoFormCu co the tra ve TAB MOI
       page.on('response', nghe);
 
+      if (don.kho) { log(`Ship From: kho ${don.kho}`); await dienKhoGui(page, don.kho); }
       log('Muc 1 Where');   const noiNhan = await dienNoiNhan(page, don.noiNhan);
       log('residential');   await xacNhanResidential(page, don.laKhachLe);
       log('Muc 2 What');    const kien = await dienPackage(page, 0, don.kien);
