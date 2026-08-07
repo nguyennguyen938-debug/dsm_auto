@@ -346,3 +346,35 @@ btn_package-section-1-packaging · btn_AccountDropdown-selectUpsAccount
 ```
 
 ⚠️ URL có `?tx=<mã phiên>` — **đúng như tài liệu đã cảnh báo, KHÔNG hard-code**.
+
+
+---
+
+## 🔴 MỤC 5 PAYMENT — `12C8D2` / `92571` BỊ UPS TỪ CHỐI (07/08/2026)
+
+Điền đúng như tài liệu (`Third Party`, account **`12C8D2`**, ZIP **`92571`**) rồi bấm **Review**
+thì trang báo `250002 - A general system error has occurred`.
+
+Bắt phản hồi API thì thấy lỗi thật **không phải "general system error"**:
+
+```
+POST /api/LookupAndValidation/ValidateAccounts
+{"code":"250002","description":"Invalid Authentication Information.",
+ "source":"ValidateAccounts","serviceMethod":"ValidateAccounts"}
+```
+
+Tức UPS **không xác thực được cặp số tài khoản + ZIP của bên thứ ba**.
+
+**Đã loại trừ:**
+- ❌ *Không* phải do dữ liệu mẫu / địa chỉ giao giả — lỗi đến từ `ValidateAccounts`,
+  không đụng gì tới địa chỉ người nhận. (Đây là giả thuyết đầu tiên và nó **SAI**.)
+- ❌ *Không* phải do ô Country — nó vẫn đang `United States`, không phải `Select One`.
+- ✅ `/api/Session/UpdateShippingContext` trả `isValid:true` — Mục 1–4 hợp lệ.
+
+**Chưa biết, cần người dùng chốt:**
+1. `12C8D2` có đúng là số tài khoản UPS còn hiệu lực không? Ô ghi *"6- or 9-character
+   alphanumeric code"* nên độ dài 6 là hợp lệ.
+2. ZIP `92571` có khớp đúng với tài khoản đó không? Ô ghi *"Must match account"*.
+3. Tài khoản bên thứ ba có cần được cấp quyền trước khi dùng để tính cước không?
+
+⚠️ Tài khoản **gửi** thì đã chốt: **để nguyên mặc định** (`1741XG`), không đụng vào.
