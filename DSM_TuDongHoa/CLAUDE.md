@@ -40,8 +40,10 @@ Claude Code đọc file này tự động. Đây là bản tóm tắt **đã ki�
     riêng, cũng dùng Xvfb/x11vnc/websockify và MCP `playwright`).
     **Giết tiến trình phải theo PID đã ghi lại lúc tạo**, hoặc lọc theo `DISPLAY :99`.
     ⛔ **KHÔNG dùng `pgrep -x <tên>` rồi kill hàng loạt, KHÔNG dùng `pkill -f`.**
-    Đã sập hai lần 06–07/08: `pkill -f` khớp phải chính dòng lệnh của shell nên tự giết mình;
-    `pgrep -x x11vnc` giết luôn x11vnc của Wayfair (`caught signal: 15` trong log của họ).
+    Đã sập **BA lần** trong 06–07/08 — hai lần `pkill -f` khớp phải chính dòng lệnh của shell
+    nên tự giết mình (lần thứ ba xảy ra NGAY SAU khi viết quy tắc này), một lần `pgrep -x x11vnc`
+    giết luôn x11vnc của Wayfair (`caught signal: 15` trong log của họ).
+    → Dùng `10_VM_Tool/vnc.sh` để bật/tắt, nó giết theo PID đã ghi. **Đừng gõ `pkill`/`pgrep` nữa.**
 
 ---
 
@@ -229,7 +231,21 @@ mỗi SKU một dòng. Loại gỗ = chữ sau `Unfinished` ở cột B của `p
 
 ## 8. TRẠNG THÁI & VIỆC CÒN TREO
 
-Cập nhật **06/08/2026**.
+Cập nhật **07/08/2026**.
+
+### 🔐 Phiên đăng nhập — profile cố định `11_TaiVe/.profile-ground`
+
+Kiểm 07/08 (đóng hẳn trình duyệt rồi mở lại): **Lecangs và UPS đều CÒN PHIÊN**.
+Dùng `chromium.launchPersistentContext('11_TaiVe/.profile-ground', {...})`.
+
+| Site | Đăng nhập | Ghi chú |
+|---|---|---|
+| Lecangs | `sue.nguyen@allforwood.com` | Không MFA. `creds.json` có mật khẩu nhưng **đăng nhập bằng nó vẫn báo sai** — hoặc mật khẩu lệch, hoặc tài khoản đã khoá sau 6 lần thử. **ĐỪNG thử thêm.** Phiên trong profile vẫn dùng tốt |
+| UPS | `allforwood` (KHÔNG phải email — email chỉ là tên hiển thị) | Có MFA. Đã tích *Remember this device 30 days* → hết hạn khoảng **06/09/2026** thì phải đăng nhập tay lại |
+| AACT | `info@allforwood.com` | Không MFA, `creds.json` đăng nhập được bình thường |
+
+🔴 **UPS BẮT BUỘC chạy headful trên Xvfb** — headless bị Akamai chặn (`ERR_HTTP2_PROTOCOL_ERROR`),
+đổi `userAgent` không cứu được. Lecangs và AACT thì headless vẫn chạy.
 
 ### ✅ Đang chạy tự động, không cần ai
 
