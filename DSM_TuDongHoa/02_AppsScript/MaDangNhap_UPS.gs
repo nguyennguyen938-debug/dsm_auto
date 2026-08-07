@@ -3,6 +3,12 @@
  *  MaDangNhap_UPS.gs — lấy mã MFA của UPS từ Gmail
  * ------------------------------------------------------------
  *  UPS gửi mã xác minh về hộp thư khi đăng nhập từ thiết bị lạ.
+ *  Dạng thư thật (xác minh 07/08/2026, 6/6 thư đọc đúng):
+ *      tiêu đề: "UPS: [738750]   is Your One-Time Passcode"
+ *      thân   : "Here's your One-Time Passcode 738750 This passcode will
+ *                expire in 5 minutes."
+ *  ⚠️ Mã CÓ THỂ BẮT ĐẦU BẰNG SỐ 0 (đã gặp `061310`) — luôn giữ dạng CHUỖI,
+ *     đừng bao giờ parseInt, nếu không mất số 0 đầu.
  *  File này cho phép tool trên VM lấy mã đó mà KHÔNG cần ai đưa
  *  mật khẩu Gmail.
  *
@@ -11,7 +17,7 @@
  *      Script Properties, KHÔNG nằm trong code nên không vào git.
  *   2. Chỉ nhận thư từ đúng `noreply@id.ups.com`.
  *   3. Chỉ trả mã của thư đến trong `PHUT_TOI_DA` phút gần nhất
- *      (mặc định 10). Mã cũ hơn coi như đã hết hạn.
+ *      (**5** — đúng bằng hạn UPS ghi trong thư). Cũ hơn coi như hết hạn.
  *   4. KHÔNG trả nội dung thư, chỉ trả đúng dãy số.
  *
  *  CÀI 1 LẦN: chạy `TAO_KHOA_UPS()` rồi lưu khoá in ra vào
@@ -24,7 +30,11 @@
  */
 
 var UPS_NGUOI_GUI = 'noreply@id.ups.com';
-var UPS_PHUT_TOI_DA = 10;          // mã cũ hơn ngần này phút -> bỏ
+/* 🔴 THU THAT CUA UPS GHI: "This passcode will expire in 5 minutes."
+ * Nen cua so phai la 5, khong phai 10. Tra ve ma da qua 5 phut la tra ve thu
+ * CHAC CHAN KHONG DUNG DUOC — te hon la tra null, vi ben goi se dem no di dang
+ * nhap roi that bai ma khong hieu vi sao. */
+var UPS_PHUT_TOI_DA = 5;
 var UPS_KHOA_PROP = 'UPS_MA_KHOA'; // tên thuộc tính chứa khoá bí mật
 
 /** CHẠY 1 LẦN — sinh khoá bí mật, in ra để chép sang VM. */
@@ -38,8 +48,8 @@ function TAO_KHOA_UPS() {
 /**
  * Rút mã từ nội dung thư.
  *
- * ⚠️ CHƯA BIẾT CHẮC UPS viết mã ra sao — chạy `DIAG_maUps()` để xem thư thật rồi
- *    chỉnh lại hàm này nếu cần. Hiện tại:
+ * ✅ ĐÃ ĐỐI CHIẾU 6/6 THƯ THẬT (07/08/2026) — đọc đúng cả `061310` có số 0 đầu.
+ *    Cách làm:
  *      - ưu tiên số 4–8 chữ số đứng NGAY SAU chữ gợi ý (code / verification / PIN…)
  *      - không thấy thì lấy số 6 chữ số ĐỨNG MỘT MÌNH đầu tiên
  *    Cố ý KHÔNG vơ mọi dãy số: thư còn số điện thoại, mã vùng, năm…
@@ -82,8 +92,9 @@ function _timMaUps(phut) {
 }
 
 /**
- * Action web app: `?action=maUps&khoa=<KHOA>[&phut=10]`
+ * Action web app: `?action=maUps&khoa=<KHOA>[&phut=5]`
  * Trả { ma, tuoiGiay } — KHÔNG trả nội dung thư.
+ * `ma` là CHUỖI, có thể bắt đầu bằng 0. Đừng parseInt ở bên gọi.
  */
 function _maUps(body) {
   var khoaThat = PropertiesService.getScriptProperties().getProperty(UPS_KHOA_PROP);

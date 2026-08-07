@@ -27,6 +27,9 @@ Claude Code đọc file này tự động. Đây là bản tóm tắt **đã ki�
    còn ra Date thì ghi lại kèm dấu nháy đầu. Áp cho **cả cột B (PO) và cột K**.
 6. **Sửa web app Apps Script phải Deploy ▸ New version.** Trigger dùng code Head (Save là đủ),
    web app thì KHÔNG.
+   ⚠️ **THÊM FILE `.gs` MỚI cũng phải deploy lại.** Gặp 07/08: `DIAG_maUps()` chạy ngon trong
+   trình soạn (code Head) nhưng web app trả `_maUps is not defined` — file mới chưa vào bản deploy.
+   Hàm chạy tay ≠ hàm web app gọi được.
 7. Đơn **Ground** — 🔄 **ĐỔI 06/08/2026, quyết định cũ đã hết hiệu lực.** Trước ghi "chỉ dừng ở
    mức có slip trên Drive". Nay có quy trình riêng đầy đủ: UPS tạo shipping label → Lecangs →
    ghi Tracking Number vào **cột N**. Xem `01_HuongDan_VanHanh/7_QuyTrinh_Ground_UPS.md`.
