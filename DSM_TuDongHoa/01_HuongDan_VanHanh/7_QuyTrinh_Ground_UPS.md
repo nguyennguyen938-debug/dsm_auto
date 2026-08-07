@@ -301,3 +301,48 @@ danh sách chờ, đừng gửi `0` lên UPS.
 2. ~~`makeFolder` cần đường bỏ trần cho Ground~~ → **xong 07/08** (`boQuaTran`), **cần deploy**.
 3. ~~Lecangs có MFA không?~~ → **KHÔNG**, user + password thường (chốt 07/08).
 4. ~~Số liệu carton cho SKU `-B`~~ → **đã có đủ 07/08**, đối chiếu `pallet.csv` khớp 10/10.
+
+---
+
+## 🔴 UPS ĐÃ ĐỔI GIAO DIỆN TẠO SHIPMENT (khảo sát 07/08/2026)
+
+Quy trình ở trên viết theo giao diện **CŨ** (Where / What / How / Details / Payment, bấm
+Continue qua từng bước). Vào `https://www.ups.com/ship?loc=en_US` bây giờ ra giao diện **MỚI**:
+
+| Tài liệu (cũ) | Giao diện mới |
+|---|---|
+| Mục 1 **Where** | 1 **Addresses** — hai tab `ship-from-tab_btn` / `ship-to-tab_btn` |
+| Mục 2 **What** | 2 **Packages** |
+| Mục 3 **How** | 3 **Delivery Options** + **Pickup or Drop-off** |
+| Mục 4 **Details** | *(không còn)* |
+| Mục 5 **Payment** | 5 **Payment Method** |
+
+Năm mục **dồn trên một trang**, không bấm Continue nữa.
+
+**Người dùng chốt 07/08: dùng giao diện CŨ** — bấm `Go to Previous Experience` trên trang mới.
+
+### Bẫy đã gặp khi tự động hoá trang này
+
+1. 🔴 **`id` BỊ TRÙNG.** `#go-back-to-previous-experience-btn` khớp **2 phần tử**: thẻ bọc
+   Angular `<app-ups-cta>` và `<button>` thật bên trong. Playwright báo *strict mode violation*.
+   → Phải chỉ đích danh `button#go-back-to-previous-experience-btn`.
+   (Cùng họ với bẫy 2 nút `Continue` ở trang đăng nhập Auth0 và 3 phần tử "Go" trên DSM.)
+
+2. 🔴 **Hộp thoại xác nhận dùng shadow DOM đóng.** Sau khi bấm nút trên, hiện hộp
+   *"Are you sure you want to cancel?"* với hai nút **Yes / No**. `querySelectorAll`,
+   `getByRole`, `getByText` đều **không** thấy hai nút đó (0 phần tử).
+   → Chưa có cách bấm bằng code. Hiện phải **bấm tay trong VNC**.
+
+### `id` của giao diện MỚI (ghi lại phòng khi sau này UPS bỏ giao diện cũ)
+
+```
+shipTo-name · shipTo-contactName · shipTo-phone · shipTo-email
+singleaddress1 (name của ô địa chỉ; id của nó là "shipTo-Address poBox-error-message" — id rác)
+agentShipTo_residential_address (checkbox residential)
+package-section-1-weight / -length / -width / -height / -reference
+addAnotherPackageBtn · duplicatePackageBtn0
+btn_shipTo-saved-address-enterNewAddress · btn_shipTo-country-dropdown-countryName
+btn_package-section-1-packaging · btn_AccountDropdown-selectUpsAccount
+```
+
+⚠️ URL có `?tx=<mã phiên>` — **đúng như tài liệu đã cảnh báo, KHÔNG hard-code**.
