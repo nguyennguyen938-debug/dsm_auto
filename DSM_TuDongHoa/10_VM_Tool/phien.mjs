@@ -1,0 +1,131 @@
+/**
+ * ============================================================================
+ *  phien.mjs — mở trình duyệt dùng PROFILE CỐ ĐỊNH, và tự vào lại khi hết phiên
+ * ----------------------------------------------------------------------------
+ *  Mọi thao tác web của nhánh GROUND (UPS + Lecangs) đi qua đây.
+ *
+ *  🔴 BA ĐIỀU BẮT BUỘC, đều là kết quả đo thật ngày 07/08/2026:
+ *
+ *  1. PHẢI dùng `launchPersistentContext` trỏ vào `11_TaiVe/.profile-ground`.
+ *     Phiên Lecangs, phiên UPS, và dấu "Remember this device 30 days" của UPS
+ *     đều nằm trong profile — mở context tạm là mất hết.
+ *
+ *  2. PHẢI chạy HEADFUL trên màn hình ảo (`DISPLAY=:99`).
+ *     Akamai của UPS chặn headless: `ERR_HTTP2_PROTOCOL_ERROR`. Đặt `userAgent`
+ *     thật KHÔNG cứu được — đã thử. `curl` trần cũng bị chặn, `curl` kèm
+ *     `sec-ch-ua`/`sec-fetch-mode` thì qua. Lecangs và AACT thì headless vẫn chạy,
+ *     nhưng dùng chung một đường cho gọn.
+ *
+ *  3. Vào lại Lecangs bằng **mật khẩu Chrome đã lưu**, KHÔNG phải `creds.json`.
+ *     Chrome tự điền sẵn cả user lẫn pass khi mở trang đăng nhập trong profile này;
+ *     chỉ việc bấm Sign in (kiểm 07/08: API trả `success:true`).
+ *     `creds.json` để trống `lecangs.pass` có chủ ý — mật khẩu từng điền vào đó bị
+ *     báo sai, và thử nhiều lần dễ khoá tài khoản thật.
+ * ==========================================================================*/
+
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { chromium } from 'playwright';
+
+const GOC = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+export const PROFILE = process.env.DSM_PROFILE || path.join(GOC, '11_TaiVe', '.profile-ground');
+const CREDS = process.env.DSM_CREDS || path.join(GOC, '11_TaiVe', 'creds.json');
+const MAN_HINH = process.env.DISPLAY || ':99';
+
+/** Màn hình ảo có sẵn chưa? Không có thì mọi thứ headful sẽ chết. */
+export async function coManHinh() {
+  const { execFile } = await import('node:child_process');
+  return new Promise(ok => execFile('xdpyinfo', ['-display', MAN_HINH], e => ok(!e)));
+}
+
+/**
+ * Mở context. NHỚ gọi `await ctx.close()` — profile chỉ được ghi đầy đủ khi đóng sạch.
+ * @param headless chỉ đặt true khi CHẮC CHẮN không đụng ups.com.
+ */
+export async function moContext({ headless = false } = {}) {
+  if (!headless && !await coManHinh()) {
+    throw new Error(`khong co man hinh ${MAN_HINH} — chay "10_VM_Tool/vnc.sh bat" truoc`);
+  }
+  return chromium.launchPersistentContext(PROFILE, {
+    headless,
+    viewport: { width: 1500, height: 950 },
+    acceptDownloads: true,
+    env: { ...process.env, DISPLAY: MAN_HINH }
+  });
+}
+
+/* --------------------------------------------------------------- Lecangs ---- */
+
+const LEC_TRANG_CHU = 'https://app.lecangs.com/oms/inventory';
+const LEC_DANG_NHAP = 'https://app.lecangs.com/oms?redirect=/oms/inventory';
+
+/**
+ * Đảm bảo đã đăng nhập Lecangs. Còn phiên thì thôi; hết thì để Chrome tự điền
+ * rồi bấm Sign in.
+ * ⚠️ Chỉ thử ĐÚNG MỘT LẦN. Sai thì ném lỗi, KHÔNG lặp — Lecangs đã có 6 lần
+ *    đăng nhập sai trong lịch sử, thử thêm dễ khoá tài khoản.
+ */
+export async function vaoLecangs(page) {
+  await page.goto(LEC_TRANG_CHU, { waitUntil: 'domcontentloaded', timeout: 70000 });
+  await page.waitForTimeout(7000);
+  if (!await page.locator('#form_item_password').count()) return { ok: true, daDangNhapLai: false };
+
+  // Hết phiên -> trang đăng nhập. Mở lại đúng URL đăng nhập để Chrome tự điền.
+  await page.goto(LEC_DANG_NHAP, { waitUntil: 'domcontentloaded', timeout: 70000 });
+  await page.waitForTimeout(8000);
+
+  const dien = await page.evaluate(() => ({
+    user: (document.getElementById('form_item_username') || {}).value || '',
+    soKyTu: ((document.getElementById('form_item_password') || {}).value || '').length
+  }));
+  if (!dien.user || !dien.soKyTu) {
+    throw new Error('Lecangs het phien va Chrome KHONG tu dien duoc. Vao VNC dang nhap tay ' +
+                    '(10_VM_Tool/vnc.sh bat). DUNG doan mat khau — tai khoan de bi khoa.');
+  }
+
+  let api = null;
+  const nghe = async r => {
+    if (!/\/api\/auth\/oauth\/token/.test(r.url())) return;
+    try { const o = JSON.parse(await r.text()); api = o.success === true ? null : (o.message || `code ${o.code}`); }
+    catch { /* khong phai JSON */ }
+  };
+  page.on('response', nghe);
+  await page.locator('button:has-text("Sign in")').first().click({ timeout: 20000 });
+  await page.waitForTimeout(11000);
+  page.off('response', nghe);
+
+  if (api) throw new Error(`Lecangs tu dang nhap lai THAT BAI: ${api}. KHONG thu lai — de khoa tai khoan.`);
+  if (await page.locator('#form_item_password').count()) {
+    throw new Error('Lecangs: bam Sign in xong van o trang dang nhap');
+  }
+  return { ok: true, daDangNhapLai: true, user: dien.user };
+}
+
+/* ------------------------------------------------------------------- UPS ---- */
+
+const UPS_BANG = 'https://www.ups.com/ppc/dashboard.html?loc=en_US#/companyDashboard';
+
+/**
+ * Đảm bảo đã đăng nhập UPS.
+ * Còn phiên thì thôi. Hết phiên thì BÁO LỖI chứ không tự đăng nhập: UPS có MFA,
+ * và dù "Remember this device" còn hiệu lực thì bước nhập mã vẫn có thể hiện ra.
+ * Tự động hoá chỗ này cần đọc được hộp thư `info@allforwood.com` — chưa có.
+ */
+export async function vaoUps(page) {
+  await page.goto(UPS_BANG, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.waitForTimeout(10000);
+  const r = await page.evaluate(() => ({
+    url: location.href,
+    coNutLogIn: /\bLog In\b/.test(document.body.innerText.slice(0, 2000)),
+    coOPass: document.querySelectorAll('input[type=password]').length > 0
+  }));
+  if (!r.coNutLogIn && !r.coOPass) return { ok: true };
+  throw new Error('UPS het phien. Vao VNC dang nhap tay: 10_VM_Tool/vnc.sh bat && ./vnc.sh trinhduyet. ' +
+                  'Tai khoan la "allforwood" (KHONG phai email). Nho tich "Remember this device for 30 days".');
+}
+
+/** Đọc creds — chỉ dùng cho site nào thật sự cần (hiện: AACT, UPS). */
+export async function docCreds(site) {
+  const d = JSON.parse(await fs.readFile(CREDS, 'utf8'));
+  return d[site] || {};
+}
