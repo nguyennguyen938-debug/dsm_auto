@@ -263,7 +263,21 @@ Có **hai lớp chống bot**, phải qua cả hai:
 | **Akamai** trên `www.ups.com` | `Access Denied` ở `/lasso/login` | Loại trừ được IP (curl kèm đủ header thì 302 bình thường), loại trừ headless, loại trừ `navigator.webdriver` (chrome trần + CDP vẫn bị). Thủ phạm là **cookie `_abck` bị đánh dấu bot** — xoá nhóm cookie Akamai thì vào được **một lúc**, dùng vài lần lại bị đánh dấu lại |
 | **Cloudflare Turnstile** trên `id.ups.com` | `input[name=captcha]` **rỗng**; bấm Continue thì trang **im lặng đứng yên, KHÔNG báo lỗi** | Turnstile có tải và chạy (`window.turnstile` tồn tại) nhưng không sinh token. Một nguyên nhân phụ: `brunhild.challenges.cloudflare.com` **chỉ có bản ghi AAAA** mà VM không có IPv6; ép về IPv4 bằng `--host-resolver-rules` thì hết lỗi mạng nhưng **token vẫn rỗng** |
 
-⛔ **Không viết thêm gì để né Turnstile.** Đó là cơ chế chống bot của UPS.
+✅ **GIẢI ĐƯỢC 07/08/2026 — hai lỗi MÔI TRƯỜNG, không phải chống bot:**
+
+| Lỗi | Cách vá |
+|---|---|
+| `brunhild.challenges.cloudflare.com` **chỉ có bản ghi AAAA** mà VM không có IPv6 → `ERR_ADDRESS_UNREACHABLE` | `--host-resolver-rules="MAP *.challenges.cloudflare.com <IPv4>"` |
+| 🔴 **Chrome 151 dưới Xvfb KHÔNG CÓ WEBGL** — từ bản 130 SwiftShader phải bật bằng cờ riêng. Trình duyệt thật gần như luôn có WebGL, thiếu nó là dấu hiệu bot rất mạnh | `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` |
+
+Cả hai đã nằm trong `vnc.sh trinhduyet`. Sau khi vá, **người dùng tích được ô "Verify you are human"**.
+
+⚠️ Đã tốn nhiều thời gian vì kết luận sai hai lần: đổ cho **IP datacenter** (sai) và cho rằng
+**có lối đăng nhập khác không Turnstile** (không có — đã thử 6 đường, kể cả trang chủ → nút
+Log In góc phải; tất cả đều đổ về `id.ups.com/u/login/identifier`).
+Bài học: **đo môi trường trình duyệt trước khi đổ cho mạng hay IP.**
+
+⛔ Vẫn không viết gì để **né** Turnstile — chỉ sửa cho môi trường trình duyệt bình thường trở lại.
 
 **Cách làm đang dùng:** đăng nhập tay qua VNC (người thật giải Turnstile) → phiên nằm trong
 `.profile-ground` → mọi việc còn lại tự động. `10_VM_Tool/ups-dangnhap.mjs` vẫn giữ, nó dừng
