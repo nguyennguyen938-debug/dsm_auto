@@ -126,3 +126,145 @@ export function chonKho(uuTien, hang, canBaoNhieu = 1) {
   throw new Error(`KHONG kho nao du hang (can ${canBaoNhieu}). Ton kho hien co: ${tom}. ` +
                   `Thu tu uu tien: ${uuTien.join(' > ')}. -> DUNG va HOI NGUOI DUNG.`);
 }
+
+
+/* ==========================================================================
+ *  TẠO ĐƠN PARCEL — Phần 2 của `7_QuyTrinh_Ground_UPS.md`
+ * ------------------------------------------------------------------------
+ *  🔴 NĂM ĐIỀU ĐO THẬT 07/08/2026:
+ *
+ *  1. **`Type` là nhóm TAB, không phải radio.** Ba tab: `Fulfill by Lecangs` ·
+ *     `Bill to 3rd party` · `Upload`. Phải bấm tab **`Upload`** thì ô `Carrier` và
+ *     `Tracking #` mới hiện ra. Trước đó chúng KHÔNG tồn tại trong DOM.
+ *
+ *  2. `Address Line1/2` là **`<textarea>`**, không phải `<input>`.
+ *
+ *  3. Các ô chọn là **Ant Design Select** — phải gõ vào ô tìm rồi bấm dòng trong
+ *     danh sách bật ra, `selectOption()` KHÔNG dùng được.
+ *
+ *  4. ⛔ **`Save & Submit` TẠO ĐƠN THẬT trên Lecangs.** Hàm này mặc định DỪNG trước
+ *     nút đó. Muốn gửi thật phải truyền `guiThat: true` — cố ý làm khó.
+ *
+ *  5. Quy trình: **mỗi Tracking Number = MỘT đơn Lecangs riêng**, `Shipment Qty`
+ *     luôn `1`. Đơn có 3 tracking number thì lặp hàm này 3 lần.
+ * ======================================================================== */
+
+const TRANG_TAO = 'https://app.lecangs.com/oms/parcelOrder/add?type=add';
+
+const F = {
+  kho:        'form_item_warehouseCode',
+  platform:   'form_item_platform',
+  po:         'form_item_poNo',
+  platformNo: 'form_item_platformNo',
+  ten:        'form_item_name',
+  dienThoai:  'form_item_phone',
+  quocGia:    'form_item_countryCode',
+  bang:       'form_item_province',
+  city:       'form_item_city',
+  zip:        'form_item_postalCode',
+  diaChi1:    'form_item_street1',
+  diaChi2:    'form_item_street2',
+  carrier:    'form_item_omsTocOrderExpressInfoVo_carrierName',
+  tracking:   'form_item_omsTocOrderExpressInfoVo_trackingNo'
+};
+
+/** Gõ vào ô thường rồi ĐỌC LẠI KIỂM (cùng lý do với `go()` bên ups-form.mjs). */
+async function dien(page, id, giaTri) {
+  const o = page.locator(`#${id}`).first();
+  const mong = String(giaTri ?? '');
+  for (let i = 0; i < 3; i++) {
+    await o.click(); await o.fill('');
+    if (mong) await o.pressSequentially(mong, { delay: 40 });
+    await page.waitForTimeout(900);
+    if ((await o.inputValue()) === mong) return;
+  }
+  throw new Error(`Lecangs: o "${id}" ghi 3 lan van sai (muon "${mong}", dang "${await o.inputValue()}")`);
+}
+
+/**
+ * Ant Select: bấm mở, gõ tìm, rồi bấm dòng khớp TUYỆT ĐỐI trong danh sách bật ra.
+ *
+ * 🔴 PHẢI bấm vào **vỏ** `.ant-select-selector`, KHÔNG bấm vào `input#...` bên trong:
+ *    ô input đó bị lớp phủ của Ant che, Playwright chờ mãi rồi timeout 30 s.
+ *    (Gặp 07/08 — `locator.click: Timeout 30000ms exceeded` ở ô Delivery Warehouse.)
+ */
+async function chon(page, id, nhan, { khopRieng = null } = {}) {
+  const vo = page.locator(`.ant-select:has(#${id}) .ant-select-selector`).first();
+  await vo.click({ timeout: 20000 });
+  await page.waitForTimeout(1200);
+  await page.locator(`#${id}`).fill('');
+  await page.locator(`#${id}`).pressSequentially(nhan, { delay: 60 });
+  await page.waitForTimeout(2500);
+  const dong = page.locator('.ant-select-item-option-content').filter({ hasText: nhan });
+  const n = await dong.count();
+  if (!n) throw new Error(`Lecangs: chon "${id}" — khong thay dong nao khop "${nhan}"`);
+  // khớp TUYỆT ĐỐI, hoặc theo luật riêng nếu bên gọi truyền vào
+  for (let i = 0; i < n; i++) {
+    const t = (await dong.nth(i).innerText()).trim();
+    if (khopRieng ? khopRieng(t) : t === nhan) { await dong.nth(i).click(); await page.waitForTimeout(1500); return t; }
+  }
+  const ds = [];
+  for (let i = 0; i < Math.min(n, 5); i++) ds.push((await dong.nth(i).innerText()).trim());
+  throw new Error(`Lecangs: "${id}" co ${n} dong chua "${nhan}" nhung KHONG dong nao khop — thay: ${JSON.stringify(ds)}`);
+}
+
+/**
+ * Tạo MỘT đơn parcel Lecangs cho MỘT Tracking Number.
+ *
+ * @param don {kho, po, tenKhach, dienThoai, bang, city, zip, diaChi1, diaChi2,
+ *             tracking, duongDanLabel, sku}
+ * @param guiThat  ⛔ `true` mới bấm `Save & Submit`. Mặc định `false` = chỉ điền rồi dừng.
+ */
+export async function taoDonParcel(page, don, { guiThat = false, log = () => {} } = {}) {
+  for (const k of ['kho', 'po', 'tenKhach', 'bang', 'city', 'zip', 'diaChi1', 'tracking']) {
+    if (!don[k]) throw new Error(`taoDonParcel: thieu "${k}"`);
+  }
+  await page.goto(TRANG_TAO, { waitUntil: 'domcontentloaded', timeout: 70000 });
+  await page.waitForTimeout(14000);
+
+  log('chon kho'); await chon(page, F.kho, don.kho);
+  log('chon platform'); await chon(page, F.platform, 'The Home Depot');   // tài liệu: LUÔN
+  log('dien po'); await dien(page, F.po, don.po);
+  log('dien platformNo'); await dien(page, F.platformNo, don.po);   // tài liệu: cũng là số PO
+
+  log('dien ten'); await dien(page, F.ten, don.tenKhach);
+  if (don.dienThoai) await dien(page, F.dienThoai, don.dienThoai);
+  log('chon quocGia'); await chon(page, F.quocGia, 'United States (the)');  // tài liệu: đúng chuỗi này
+  // 🔴 CHỌN COUNTRY XONG, ô `State` BIẾN THÀNH Ant Select (City/Zip vẫn là ô thường).
+  //    Đo 07/08: trước khi chọn nước, `form_item_province` là INPUT thường; sau khi chọn
+  //    "United States (the)" nó bị bọc `.ant-select` và bị `.ant-select-selection-item` che
+  //    -> `fill()` treo 30 s rồi timeout. Phải dùng `chon()`, không dùng `dien()`.
+  //    Cũng còn một dropdown treo lại (`lopPhu: 1`) — bấm Escape cho rơi xuống.
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(1500);
+  const bangLaSelect = await page.evaluate(i => !!document.getElementById(i)?.closest('.ant-select'), F.bang);
+  log('dien bang (' + (bangLaSelect ? 'select' : 'o thuong') + ')');
+  // 🔴 Nhãn bang trên Lecangs là dạng `Texas【TX】` — ngoặc vuông TOÀN RỘNG 【】,
+  //    không phải `TX` trần. Khớp theo mã trong ngoặc.
+  if (bangLaSelect) await chon(page, F.bang, don.bang, { khopRieng: t => t.endsWith(`\u3010${don.bang}\u3011`) });
+  else              await dien(page, F.bang, don.bang);
+  log('dien city'); await dien(page, F.city, don.city);
+  log('dien zip');  await dien(page, F.zip,  don.zip);
+  log('dien diaChi1'); await dien(page, F.diaChi1, don.diaChi1);
+  await dien(page, F.diaChi2, don.diaChi2 || '');
+
+  // Type: PHẢI bấm tab Upload thì Carrier/Tracking mới hiện — điều 1 ở đầu khối
+  log('bam tab Upload'); await page.locator('.ant-tabs-tab-btn').filter({ hasText: /^Upload$/ }).first().click({ timeout: 20000 });
+  await page.waitForTimeout(6000);
+  log('chon carrier'); await chon(page, F.carrier, 'UPS');   // tài liệu: LUÔN
+  log('dien tracking'); await dien(page, F.tracking, don.tracking);
+
+  const daDien = await page.evaluate(f => {
+    const v = i => (document.getElementById(i) || {}).value ?? null;
+    return Object.fromEntries(Object.entries(f).map(([k, i]) => [k, v(i)]));
+  }, F);
+
+  if (!guiThat) {
+    return { daDien, daGui: false,
+      ghiChu: 'CHUA bam "Save & Submit" — con thieu: upload file label, "Add the goods" ' +
+              '(SKU + Shipment Qty = 1). Truyen guiThat:true khi da san sang tao don THAT.' };
+  }
+  throw new Error('taoDonParcel: guiThat=true nhung buoc upload file va "Add the goods" CHUA VIET — khong duoc submit thieu du lieu');
+}
+
+export { F as O_LECANGS };
