@@ -245,11 +245,26 @@ Dùng `chromium.launchPersistentContext('11_TaiVe/.profile-ground', {...})`.
 | Site | Đăng nhập | Ghi chú |
 |---|---|---|
 | Lecangs | `sue.nguyen@allforwood.com` | Không MFA. `creds.json` có mật khẩu nhưng **đăng nhập bằng nó vẫn báo sai** — hoặc mật khẩu lệch, hoặc tài khoản đã khoá sau 6 lần thử. **ĐỪNG thử thêm.** Phiên trong profile vẫn dùng tốt |
-| UPS | ❓ **hai nguồn nói khác nhau — chờ chốt**: CLAUDE.md ghi `allforwood`, `creds.json` ghi `info@allforwood.com` | Có MFA. **Mã MFA nay lấy tự động được** (`layMaUps()`, kiểm thật 07/08). Nhưng CHƯA nối vào đăng nhập tự động vì chưa chốt tên đăng nhập — sai tên là đúng vết xe Lecangs. Đã tích *Remember this device 30 days* → hết hạn khoảng **06/09/2026** |
+| UPS | **`info@allforwood.com`** — người dùng chốt 07/08/2026. Bản CLAUDE.md trước ghi `allforwood`, **SAI, đã bỏ** | Có MFA nhưng **mã lấy tự động được** (`layMaUps()`). Đã tích *Remember this device 30 days* → hết hạn khoảng **06/09/2026** |
 | AACT | `info@allforwood.com` | Không MFA, `creds.json` đăng nhập được bình thường |
 
 🔴 **UPS BẮT BUỘC chạy headful trên Xvfb** — headless bị Akamai chặn (`ERR_HTTP2_PROTOCOL_ERROR`),
 đổi `userAgent` không cứu được. Lecangs và AACT thì headless vẫn chạy.
+
+🔴 **Trang đăng nhập UPS chặn PROFILE MỚI — đo 07/08/2026, headful trên `:99`:**
+
+| URL | Profile mới tinh | `.profile-ground` |
+|---|---|---|
+| `ups.com/us/en/home` | ✅ vào được | ✅ |
+| `ups.com/lasso/login` | ❌ **Access Denied** (Akamai) | — |
+| `ppc/dashboard.html` | ❌ Access Denied (bị đẩy sang `/lasso/login`) | ✅ **vào thẳng dashboard** |
+
+Vào trang chủ làm nóng trước (lấy đủ cookie `bm_sz` + `_abck`) **vẫn không cứu được**.
+Vì sao hai profile khác nhau thì **chưa rõ** — chưa kết luận.
+Hệ quả thực tế: **không dựng lại phiên UPS từ profile trắng bằng code được.**
+Mất `.profile-ground` là phải đăng nhập tay qua VNC.
+→ `layMaUps()` chỉ giúp khi UPS hỏi lại MFA **bên trong profile ấm**, không giúp dựng phiên từ đầu.
+→ **Backup `11_TaiVe/.profile-ground` là việc đáng làm.**
 
 ### ✅ Đang chạy tự động, không cần ai
 
