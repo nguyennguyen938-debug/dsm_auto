@@ -221,6 +221,9 @@ async function dienDongHang(page, sku) {
   return { sku: daChon, qty: await oQty.inputValue() };
 }
 
+/** Popup đã biết là quảng cáo, tắt đi không mất gì. Thêm dòng mới khi gặp cái khác. */
+const POPUP_VO_HAI = [/^Try New Feature$/i];
+
 /**
  * Đóng popup quảng cáo của Lecangs.
  *
@@ -233,10 +236,23 @@ async function dienDongHang(page, sku) {
  *    → Gọi hàm này sau khi vào trang VÀ trước các bước dài.
  */
 export async function dongPopup(page) {
-  for (let i = 0; i < 3; i++) {
-    const co = await page.evaluate(() =>
-      document.querySelectorAll('.ant-modal-wrap:not([style*="display: none"])').length);
-    if (!co) return i > 0;
+  for (let lan = 0; lan < 3; lan++) {
+    const hop = await page.evaluate(() => {
+      const m = document.querySelector('.ant-modal-wrap:not([style*="display: none"])');
+      if (!m) return null;
+      return { tieuDe: (m.querySelector('.ant-modal-title')?.textContent || '').trim(),
+               chu: (m.innerText || '').replace(/\s+/g, ' ').slice(0, 200) };
+    });
+    if (!hop) return lan > 0;
+
+    /* ⛔ CHỈ đóng đúng popup ĐÃ BIẾT là vô hại.
+     * Bản đầu đóng BẤT KỲ `.ant-modal-wrap` nào — nếu Lecangs bật một hộp XÁC NHẬN
+     * ("đơn này trùng, có tiếp tục không?") thì hàm sẽ bấm tắt nó mà không ai biết,
+     * rồi chạy tiếp như không có gì. Đó là lỗi nguy hiểm hơn hẳn một cái timeout. */
+    if (!POPUP_VO_HAI.some(re => re.test(hop.tieuDe))) {
+      throw new Error(`Lecangs: hop thoai LA dang chan form — tieu de "${hop.tieuDe}". ` +
+                      `Noi dung: ${hop.chu} -> DUNG va HOI NGUOI DUNG, khong tu dong tat.`);
+    }
     await page.locator('.ant-modal-close').first().click({ timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(1500);
   }
