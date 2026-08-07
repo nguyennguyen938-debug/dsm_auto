@@ -73,6 +73,7 @@ function doPost(e) {
     if (body.action === 'lookup')     return _lookup(body);
     if (body.action === 'needSlip')   return _needSlip(body);
     if (body.action === 'donDepManifest') return _donDepManifest(body);
+    if (body.action === 'maUps')      return _maUps(body);      // MaDangNhap_UPS.gs
 
     // ---- chế độ nhận file ----
     if (!body.folderId || !body.filename) throw new Error('Thiếu folderId/filename');
@@ -670,6 +671,7 @@ function doGet(e) {
     var p = (e && e.parameter) || {};
     if (p.action === 'needSlip') return _needSlip(p);
     if (p.action === 'donDepManifest') return _donDepManifest(p);
+    if (p.action === 'maUps')      return _maUps(p);      // MaDangNhap_UPS.gs
     if (p.action === 'lookup' && p.pos) {
       return _lookup({ pos: String(p.pos).split(',').map(function (x) { return x.trim(); }) });
     }

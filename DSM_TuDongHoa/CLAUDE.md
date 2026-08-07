@@ -107,6 +107,7 @@ Dấu hiệu người làm tay: `x` **viết thường** ở cột J/M (script l
 | `needSlip` | **GET** `?action=needSlip[&checkSlip=1]` hoặc POST | `o.pos` |
 | `lookup` | **GET** `?action=lookup&pos=a,b` hoặc POST `{pos:[...]}` | `o.rows` |
 | `donDepManifest` | **GET** `?action=donDepManifest[&thatSu=1]` — dọn `_INBOX`: manifest + file gộp + slip đã vào folder PO | `o.xoa` |
+| `maUps` | **GET** `?action=maUps&khoa=<KHOA>[&phut=10]` — lấy mã MFA của UPS từ Gmail. ⛔ **Bắt buộc có khoá**; khoá nằm trong Script Properties, không nằm trong code | `o.ma` (có thể `null`) |
 | `makeFolder` | POST `{action:'makeFolder', po, pickupSchedule, boQuaTran?}` — `boQuaTran:true` cho đơn **Ground** (không áp trần 20/ngày) | `o.folderId` |
 | `fillRow` | POST `{action:'fillRow', po, carrier, ..., skipCap:true}` | `o.row` |
 | upload file | POST `{folderId, filename, base64, mimeType}` | `o.id` |
