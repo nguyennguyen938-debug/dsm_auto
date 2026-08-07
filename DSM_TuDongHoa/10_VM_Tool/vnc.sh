@@ -89,10 +89,28 @@ trinhduyet)
   echo "  profile: $PROFILE"
   CHROME=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux64/chrome 2>/dev/null | tail -1)
   [ -x "$CHROME" ] || { echo "  ❌ khong thay chromium cua playwright"; exit 3; }
+
+  # 🔴 BAT BUOC cho trang dang nhap UPS — do that 07/08/2026:
+  #   Cloudflare Turnstile ("Verify you are human") goi
+  #   brunhild.challenges.cloudflare.com, host do CHI co ban ghi AAAA (IPv6) ma VM
+  #   nay KHONG co IPv6 -> ERR_ADDRESS_UNREACHABLE -> o tick khong bao gio xanh,
+  #   KE CA khi nguoi that ngoi bam. Ep no ve IPv4 cua Cloudflare thi moi giai duoc.
+  IP4=$(python3 -c "import socket;print(socket.getaddrinfo('challenges.cloudflare.com',443,socket.AF_INET)[0][4][0])" 2>/dev/null)
+  MAP=""
+  [ -n "$IP4" ] && MAP="--host-resolver-rules=MAP brunhild.challenges.cloudflare.com $IP4"
+  echo "  ep brunhild.challenges.cloudflare.com -> ${IP4:-(khong tra duoc, Turnstile co the hong)}"
+
+  # 🔴 BAT WEBGL BANG PHAN MEM — do that 07/08/2026:
+  #   Duoi Xvfb khong co GPU, Chrome 151 tra "KHONG CO WEBGL". Trinh duyet that gan nhu
+  #   LUON co WebGL, nen thieu no la dau hieu rat manh de Cloudflare Turnstile cham la bot
+  #   -> o "Verify you are human" khong bao gio tick duoc, KE CA nguoi that bam.
+  #   Tu Chrome 130 tro len, SwiftShader phai bat bang --enable-unsafe-swiftshader.
+  GL="--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader"
+
   DISPLAY=$MAN khoiDong chrome "$CHROME" \
       --user-data-dir="$PROFILE" --no-first-run --no-default-browser-check \
-      --window-size=1580,930 --window-position=0,0 \
-      "https://app.lecangs.com"
+      --window-size=1580,930 --window-position=0,0 $MAP $GL \
+      "https://www.ups.com/lasso/login?loc=en_US"
   sleep 4
   echo
   echo "  Trong cua so VNC, dang nhap CA HAI site (mo tab moi cho site thu 2):"
