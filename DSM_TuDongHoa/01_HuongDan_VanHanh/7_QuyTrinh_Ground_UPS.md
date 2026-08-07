@@ -437,3 +437,38 @@ Hai điều đo được:
    Trang có **rất nhiều `[role=dialog]` dựng sẵn** — phải lọc theo NỘI DUNG.
 3. `locator.click()` kể cả `force:true` **vẫn rơi vào lớp phủ** của hộp thoại, handler
    không chạy. Phải gọi `el.click()` bằng JS.
+
+
+---
+
+## ⏱️ PHIÊN UPS CHUYỂN TỪ MÁY NGƯỜI DÙNG CHỈ SỐNG ~30 PHÚT (đo 08/08)
+
+Nạp cookie lúc **00:05**, tới **00:32** đã chết (`conPhien()` -> `song:false`,
+dashboard bị đẩy về `/lasso/login`). Cookie `session_ups_com` biến mất khỏi profile.
+
+**Hệ quả cho cách làm:**
+- Cửa sổ dùng được rất hẹp. **Đừng vừa khảo sát vừa làm** — khảo sát ăn hết thời gian.
+- Trước khi chạy đơn thật: xin cookie mới, rồi **chạy ngay**, không làm gì khác trước đó.
+- `chayFormUps()` đã có `conPhien()` chặn đúng ca này: phiên chết thì DỪNG, không lặp.
+
+## 📋 Bước `/ship/guided/origin` (Ship From) — MỚI, chưa xong
+
+Shipment **mới hoàn toàn** bắt đầu ở đây, không phải `/destination`. Trước giờ không gặp
+vì luôn dùng lại `tx` đã có sẵn origin.
+
+`id` khảo sát được (lúc phiên ĐÃ CHẾT nên form ở chế độ khách):
+
+```
+origin-cac_country · origin-cac_companyOrName · origin-cac_contactName
+origin-cac_singleLineAddress · origin-cac_email · origin-cac_phone
+origin-singleLineAddressEditButton      (mở rộng địa chỉ, giống bên destination)
+returnSwitch                            ("Use a different return address?")
+nbsBackForwardNavigationContinueButton
+```
+
+Bố cục giống hệt `destination-cac_*`, chỉ đổi tiền tố.
+
+🔴 **CÒN THIẾU — phần quan trọng nhất.** Tài liệu ghi Ship From phải **ấn `edit` → mục
+`My address` → chọn kho**. Danh sách kho đó **chỉ hiện khi ĐÃ ĐĂNG NHẬP**. Lúc khảo sát
+phiên đã chết nên trang ở chế độ khách (`#anonymous-profile`, "Log In / Sign Up"), không
+thấy dropdown kho. **Phải khảo sát lại với phiên còn sống.**
