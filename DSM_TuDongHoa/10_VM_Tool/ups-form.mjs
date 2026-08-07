@@ -259,4 +259,65 @@ export async function dienPackage(page, i, kien) {
   }, { o, ref1: REF.ref1 });
 }
 
-export { O as O_UPS, P as O_PACKAGE, REF as O_REF };
+/* --- Mục 3 "How": dịch vụ + lịch pickup --- */
+const H = {
+  lyPickup:   'input#nbsShipmentServicesDropOffPickupViewToggleOption2InputId', // "Schedule a new pickup."
+  lyDropOff:  'input#nbsShipmentServicesDropOffPickupViewToggleOption1InputId',
+  giaoTanNoi: 'input#nbsShipmentServicesAccessPointViewToggleOption1InputId',   // "No, deliver to receiver."
+  suaChiTiet: 'button#nbsPickupToggleEditPickupDetails',
+  ngay:       'input#nbsPickupSelectionDatePicker',      // Pickup Date
+  somNhat:    'select#nbsPickupEarliestArrivalTime',     // Earliest Pickup Time — LUÔN 1:00 PM
+  muonNhat:   'select#nbsPickupLatestArrivalTime',       // Latest Pickup Time — mặc định 5:00 PM
+  viTri:      'select#nbsPickupOnSiteLocation',          // Preferred Pickup Location — Warehouse
+  thamChieu:  'input#nbsPickupReference'                 // Pickup Reference — số PO
+};
+
+/**
+ * Mục 3 — How: chọn `Schedule a new pickup`, dịch vụ **UPS Ground**, và lịch pickup.
+ *
+ * 🔴 **CHỌN UPS GROUND THEO NHÃN, KHÔNG THEO id.** Các ô dịch vụ có id kiểu
+ *    `nbsServiceTileServiceRadio<nhóm>_0_<vị trí>` — **phụ thuộc vị trí trong danh sách**,
+ *    mà danh sách đổi theo điểm đến và cân nặng. Hôm khảo sát UPS Ground rơi vào
+ *    `...Radio3_0_1`, đơn khác sẽ khác. Bám vào id là có ngày chọn nhầm **UPS 3 Day Select**
+ *    ở ngay bên cạnh (cùng ngày giao, giá khác hẳn).
+ *
+ * 🔴 Mấy ô `select` ở đây có value dạng Angular (`"1: Object"`, `"0: 1"`) — **chọn theo NHÃN**.
+ *
+ * @param ngay   Pickup Date `M/D/YYYY` — tính bằng `ground-tra.ngayPickupGround()`
+ * @param po     Pickup Reference
+ */
+export async function dienPickup(page, { ngay, po }) {
+  if (!ngay || !po) throw new Error('dienPickup: thieu ngay hoac po');
+
+  await page.locator(H.lyPickup).check({ force: true });
+  await page.waitForTimeout(14000);
+
+  // UPS Ground — tra theo NHÃN, xem cảnh báo ở trên
+  const id = await page.evaluate(() => {
+    const l = [...document.querySelectorAll('label')]
+      .filter(e => /\bUPS Ground\b/i.test(e.innerText || ''))
+      .filter(e => /^nbsServiceTileServiceRadio/.test(e.htmlFor || ''));
+    return l.length === 1 ? l[0].htmlFor : (l.length ? 'NHIEU:' + l.length : null);
+  });
+  if (!id) throw new Error('UPS: khong thay o dich vu "UPS Ground" trong danh sach');
+  if (id.startsWith('NHIEU:')) throw new Error(`UPS: co ${id.slice(6)} o ghi "UPS Ground" — dung va hoi, khong doan`);
+  await page.locator('input#' + id).check({ force: true });
+  await page.waitForTimeout(12000);
+
+  await page.locator(H.suaChiTiet).click({ timeout: 25000 });
+  await page.waitForTimeout(10000);
+
+  await go(page, H.ngay, ngay);
+  await page.selectOption(H.somNhat, { label: '1:00 PM' });   // tài liệu: LUÔN 1:00 PM
+  await page.selectOption(H.viTri,   { label: 'Warehouse' });
+  await go(page, H.thamChieu, po);
+
+  return page.evaluate(h => {
+    const v = s => (document.querySelector(s) || {}).value ?? null;
+    const nhan = s => { const e = document.querySelector(s); return e && e.selectedOptions ? e.selectedOptions[0]?.text : null; };
+    return { ngay: v(h.ngay), somNhat: nhan(h.somNhat), muonNhat: nhan(h.muonNhat),
+             viTri: nhan(h.viTri), thamChieu: v(h.thamChieu) };
+  }, H);
+}
+
+export { O as O_UPS, P as O_PACKAGE, REF as O_REF, H as O_PICKUP };
