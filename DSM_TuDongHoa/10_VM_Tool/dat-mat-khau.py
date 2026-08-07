@@ -3,8 +3,9 @@
 """
 dat-mat-khau.py — nhập mật khẩu vào 11_TaiVe/creds.json một cách an toàn.
 
-    python3 dat-mat-khau.py            # hiện trạng thái rồi hỏi từng site
-    python3 dat-mat-khau.py lecangs    # chỉ đặt cho một site
+    python3 dat-mat-khau.py            # CHỈ hỏi site còn THIẾU mật khẩu
+    python3 dat-mat-khau.py lecangs    # ép đặt lại cho site đã có
+    python3 dat-mat-khau.py --tatca    # hỏi mọi site
 
 Vì sao dùng script này thay vì gõ thẳng vào lệnh:
   - Mật khẩu **không hiện trên màn hình** (getpass đọc từ /dev/tty).
@@ -57,9 +58,9 @@ def dat(d, key):
     u = input(f'  Tai khoan [{cu.get("user") or goiY}]: ').strip() or cu.get('user') or ''
     if not u:
         print('  bo qua (chua co tai khoan)'); return
-    p1 = getpass.getpass('  Mat khau (go xong Enter, khong hien gi): ')
+    p1 = getpass.getpass('  Mat khau (khong hien gi | Enter de BO QUA): ')
     if not p1:
-        print('  bo qua (khong nhap gi)'); return
+        print('  -> bo qua, giu nguyen'); return
     p2 = getpass.getpass('  Nhap lai cho chac: ')
     if p1 != p2:
         print('  ❌ hai lan nhap KHAC nhau — bo qua, khong ghi gi'); return
@@ -70,7 +71,22 @@ def dat(d, key):
 def main():
     d = doc()
     trangThai(d)
-    chon = [a.lower() for a in sys.argv[1:] if a.lower() in SITE] or list(SITE)
+
+    args = [a.lower() for a in sys.argv[1:]]
+    neu = [a for a in args if a in SITE]
+    if neu:                       # goi ten site -> ep dat lai du da co
+        chon = neu
+    elif '--tatca' in args:
+        chon = list(SITE)
+    else:                         # mac dinh: CHI hoi site con thieu mat khau
+        chon = [k for k in SITE if not (d.get(k) or {}).get('pass')]
+        daCo = [k for k in SITE if (d.get(k) or {}).get('pass')]
+        if daCo:
+            print(f'Bo qua (da co mat khau): {", ".join(daCo)}')
+            print('  -> muon doi thi goi ten site, vd:  python3 dat-mat-khau.py aact\n')
+        if not chon:
+            print('Moi site deu da co mat khau. Khong co gi de lam.\n'); return
+
     for k in chon:
         dat(d, k)
     ghi(d)
