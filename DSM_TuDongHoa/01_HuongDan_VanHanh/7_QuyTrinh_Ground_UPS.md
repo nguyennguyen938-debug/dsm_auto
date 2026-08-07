@@ -21,8 +21,13 @@ Theo `1_DocPackingSlip.md`.
 ### Bước 2: Chọn kho
 
 1. Dựa theo **tiểu bang**, tra `05_TraCuu/warehouse_ranking_by_state.csv` → danh sách kho xếp
-   theo thứ tự **gần nhất → xa nhất**. 50 bang, 6 kho: `Calhoun` · `MEM-R` · `SAV` · `HOU07` ·
-   `NJF02` · `CAP`.
+   theo thứ tự **gần nhất → xa nhất**. 6 kho: `Calhoun` · `MEM-R` · `SAV` · `HOU07` · `NJF02` · `CAP`.
+
+   ⚠️ File dùng **50 mã**: 48 bang lục địa + **`NCA`/`SCA`** (Bắc/Nam California), **KHÔNG có AK/HI**
+   — y hệt `carrier.csv`. Packing slip chỉ ghi `CA`, nên phải ánh xạ.
+   ✅ Kiểm 07/08: **`NCA` và `SCA` cho thứ tự kho GIỐNG HỆT nhau**
+   (`CAP > HOU07 > MEM-R > Calhoun > SAV > NJF02`), nên `CA` **không cần phân vùng Bắc/Nam**
+   — đúng như kết luận đã có với `carrier.csv`.
 2. Vào `https://app.lecangs.com/oms/inventory`, điền **SKU** vào ô, ấn **Search** bên phải
    → hiện danh sách kho.
 3. Chọn **kho còn hàng gần nhất** — xem cột **Available Stock** để biết còn hàng hay không.
