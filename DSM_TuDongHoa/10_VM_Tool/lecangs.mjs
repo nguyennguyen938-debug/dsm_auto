@@ -147,6 +147,10 @@ export function chonKho(uuTien, hang, canBaoNhieu = 1) {
  *
  *  5. Quy trình: **mỗi Tracking Number = MỘT đơn Lecangs riêng**, `Shipment Qty`
  *     luôn `1`. Đơn có 3 tracking number thì lặp hàm này 3 lần.
+ *
+ *  6. **Danh sách `Carrier` RỖNG nếu chưa chọn `Delivery Warehouse`.** Đo 07/08: mở ô
+ *     Carrier khi chưa chọn kho -> `.ant-select-item-empty`, không một dòng nào.
+ *     Nên thứ tự điền KHÔNG ĐƯỢC ĐẢO: kho trước, carrier sau.
  * ======================================================================== */
 
 const TRANG_TAO = 'https://app.lecangs.com/oms/parcelOrder/add?type=add';
@@ -165,20 +169,134 @@ const F = {
   diaChi1:    'form_item_street1',
   diaChi2:    'form_item_street2',
   carrier:    'form_item_omsTocOrderExpressInfoVo_carrierName',
-  tracking:   'form_item_omsTocOrderExpressInfoVo_trackingNo'
+  tracking:   'form_item_omsTocOrderExpressInfoVo_trackingNo',
+  fileLabel:  'form_item_planningNo',      // nhãn "Upload the Label" — KHÔNG phải omsTocFiles
+  fileDinhKem:'form_item_omsTocFiles'      // nhãn "Attachments" — không dùng
 };
+
+/**
+ * Điền dòng hàng vừa thêm bằng "Add the goods".
+ * Quy trình: **Shipment Qty LUÔN = 1**, HS code để trống.
+ * Mỗi Tracking Number là một đơn riêng nên mỗi đơn chỉ có đúng một dòng.
+ */
+async function dienDongHang(page, sku) {
+  await dongPopup(page);
+  const bang = page.locator('table:has(th:text-is("Shipment Qty"))').first();
+  if (!await bang.count()) throw new Error('Lecangs: khong thay bang hang sau khi bam "Add the goods"');
+  const dong = bang.locator('tbody tr').last();
+
+  /* 🔴 Ô SKU trong dòng hàng cũng là **Ant Select**, không phải ô nhập thường.
+   *    Còn `Shipment Qty` thì LÀ ô thường (placeholder "Shipment Qty").
+   *    Đo 07/08 — trước đó tôi tưởng cả hai đều là input nên click treo 30 s. */
+  const voSku = dong.locator('td').first().locator('.ant-select-selector').first();
+  await voSku.click({ timeout: 20000 });
+  await page.waitForTimeout(1200);
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type(String(sku), { delay: 60 });
+  await page.waitForTimeout(3000);
+
+  const opt = page.locator('.ant-select-item-option-content');
+  const n = await opt.count();
+  if (!n) throw new Error(`Lecangs: go SKU "${sku}" nhung danh sach rong — SKU nay co trong kho da chon khong?`);
+  let daChon = null;
+  for (let i = 0; i < n; i++) {
+    const t = (await opt.nth(i).innerText()).trim();
+    if (t === String(sku) || t.startsWith(String(sku) + ' ')) { await opt.nth(i).click(); daChon = t; break; }
+  }
+  if (!daChon) {
+    const ds = [];
+    for (let i = 0; i < Math.min(n, 5); i++) ds.push((await opt.nth(i).innerText()).trim());
+    throw new Error(`Lecangs: khong dong nao khop SKU "${sku}" — thay: ${JSON.stringify(ds)}`);
+  }
+  await page.waitForTimeout(2500);
+  await dongDropdown(page);
+
+  // Shipment Qty LUÔN = 1 (quy trình: mỗi Tracking Number một đơn riêng)
+  const oQty = dong.locator('input[placeholder="Shipment Qty"]').first();
+  if (!await oQty.count()) throw new Error('Lecangs: khong thay o "Shipment Qty" trong dong hang');
+  await oQty.click({ timeout: 15000 });
+  await oQty.fill('1');
+  await page.waitForTimeout(1500);
+
+  return { sku: daChon, qty: await oQty.inputValue() };
+}
+
+/**
+ * Đóng popup quảng cáo của Lecangs.
+ *
+ * 🔴 THỦ PHẠM THẬT của mọi `Timeout 30000ms` khi điền form (tìm ra 07/08 sau nhiều vòng
+ *    đoán sai). Lecangs bật một hộp thoại **"Try New Feature"** (`.ant-modal-wrap`) vài
+ *    giây sau khi tải trang. Nó **phủ kín form**: `elementFromPoint` ngay trên ô
+ *    Delivery Warehouse trả về `DIV.ant-modal-wrap`.
+ *    Vì nó bật lên CHẬM và KHÔNG cố định thời điểm, mỗi lần chạy lại chết ở một ô khác —
+ *    nên tôi đã lần lượt đổ nhầm cho dropdown treo, cho lớp phủ Ant Select, cho React.
+ *    → Gọi hàm này sau khi vào trang VÀ trước các bước dài.
+ */
+export async function dongPopup(page) {
+  for (let i = 0; i < 3; i++) {
+    const co = await page.evaluate(() =>
+      document.querySelectorAll('.ant-modal-wrap:not([style*="display: none"])').length);
+    if (!co) return i > 0;
+    await page.locator('.ant-modal-close').first().click({ timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+  }
+  return true;
+}
+
+/**
+ * Đóng mọi dropdown Ant còn treo.
+ *
+ * 🔴 `page.keyboard.press('Escape')` KHÔNG đóng được — đo 07/08: sau Escape vẫn còn
+ *    `.ant-select-dropdown:not(.ant-select-dropdown-hidden)` và nó ĐÈ lên ô bên dưới,
+ *    làm `fill()` treo đủ 30 s rồi timeout. Phải bấm ra vùng trống cho nó mất focus.
+ */
+async function dongDropdown(page) {
+  for (let i = 0; i < 3; i++) {
+    const con = await page.evaluate(() =>
+      document.querySelectorAll('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').length);
+    if (!con) return;
+    await page.mouse.click(8, 8);          // góc trên trái, ngoài mọi ô nhập
+    await page.waitForTimeout(1200);
+  }
+}
 
 /** Gõ vào ô thường rồi ĐỌC LẠI KIỂM (cùng lý do với `go()` bên ups-form.mjs). */
 async function dien(page, id, giaTri) {
+  await dongPopup(page);
   const o = page.locator(`#${id}`).first();
   const mong = String(giaTri ?? '');
-  for (let i = 0; i < 3; i++) {
-    await o.click(); await o.fill('');
-    if (mong) await o.pressSequentially(mong, { delay: 40 });
-    await page.waitForTimeout(900);
-    if ((await o.inputValue()) === mong) return;
+
+  // Cách thường: gõ như người.
+  for (let i = 0; i < 2; i++) {
+    try {
+      await o.click({ timeout: 8000 });
+      await o.fill('', { timeout: 8000 });
+      if (mong) await o.pressSequentially(mong, { delay: 40 });
+      await page.waitForTimeout(900);
+      if ((await o.inputValue()) === mong) return;
+    } catch { /* bi che -> thu cach duoi */ }
   }
-  throw new Error(`Lecangs: o "${id}" ghi 3 lan van sai (muon "${mong}", dang "${await o.inputValue()}")`);
+
+  /* 🔴 ĐƯỜNG DỰ PHÒNG — đặt giá trị bằng JS.
+   * Một số ô của Lecangs bị lớp phủ Ant che đúng lúc, `fill()` treo đủ 30 s rồi timeout
+   * (gặp 07/08 ở ô `Tracking #`, ngay sau khi chọn Carrier). Bấm Escape và bấm ra vùng
+   * trống đều KHÔNG cứu được.
+   * React không nhận `el.value = x` trần — phải gọi setter gốc của prototype rồi bắn
+   * sự kiện `input`, nếu không state của React vẫn là chuỗi rỗng và giá trị bị xoá lại. */
+  await page.evaluate(({ i, v }) => {
+    const e = document.getElementById(i);
+    if (!e) throw new Error('khong thay o ' + i);
+    const setter = Object.getOwnPropertyDescriptor(
+      e.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype
+                               : window.HTMLInputElement.prototype, 'value').set;
+    setter.call(e, v);
+    e.dispatchEvent(new Event('input', { bubbles: true }));
+    e.dispatchEvent(new Event('change', { bubbles: true }));
+  }, { i: id, v: mong });
+  await page.waitForTimeout(1500);
+
+  const that = await o.inputValue();
+  if (that !== mong) throw new Error(`Lecangs: o "${id}" ghi khong duoc (muon "${mong}", dang "${that}")`);
 }
 
 /**
@@ -189,11 +307,16 @@ async function dien(page, id, giaTri) {
  *    (Gặp 07/08 — `locator.click: Timeout 30000ms exceeded` ở ô Delivery Warehouse.)
  */
 async function chon(page, id, nhan, { khopRieng = null } = {}) {
+  await dongPopup(page);      // popup co the bat len bat cu luc nao
   const vo = page.locator(`.ant-select:has(#${id}) .ant-select-selector`).first();
   await vo.click({ timeout: 20000 });
   await page.waitForTimeout(1200);
-  await page.locator(`#${id}`).fill('');
-  await page.locator(`#${id}`).pressSequentially(nhan, { delay: 60 });
+  /* 🔴 KHONG dung `page.locator('#id').fill()` o day: o tim ben trong Ant Select bi lop phu
+   * che, `fill()` treo du 30 s roi timeout (gap 07/08 o o Carrier — va toi da doc nham
+   * thanh loi cua o Tracking # ben duoi, mat mot vong sua sai cho).
+   * Mo select xong thi con tro da nam trong o tim -> go thang bang ban phim. */
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type(nhan, { delay: 60 });
   await page.waitForTimeout(2500);
   const dong = page.locator('.ant-select-item-option-content').filter({ hasText: nhan });
   const n = await dong.count();
@@ -201,7 +324,12 @@ async function chon(page, id, nhan, { khopRieng = null } = {}) {
   // khớp TUYỆT ĐỐI, hoặc theo luật riêng nếu bên gọi truyền vào
   for (let i = 0; i < n; i++) {
     const t = (await dong.nth(i).innerText()).trim();
-    if (khopRieng ? khopRieng(t) : t === nhan) { await dong.nth(i).click(); await page.waitForTimeout(1500); return t; }
+    if (khopRieng ? khopRieng(t) : t === nhan) {
+      await dong.nth(i).click();
+      await page.waitForTimeout(1500);
+      await dongDropdown(page);       // xem chú thích hàm — Escape KHÔNG đủ
+      return t;
+    }
   }
   const ds = [];
   for (let i = 0; i < Math.min(n, 5); i++) ds.push((await dong.nth(i).innerText()).trim());
@@ -221,6 +349,7 @@ export async function taoDonParcel(page, don, { guiThat = false, log = () => {} 
   }
   await page.goto(TRANG_TAO, { waitUntil: 'domcontentloaded', timeout: 70000 });
   await page.waitForTimeout(14000);
+  if (await dongPopup(page)) log('da dong popup "Try New Feature"');
 
   log('chon kho'); await chon(page, F.kho, don.kho);
   log('chon platform'); await chon(page, F.platform, 'The Home Depot');   // tài liệu: LUÔN
@@ -235,8 +364,7 @@ export async function taoDonParcel(page, don, { guiThat = false, log = () => {} 
   //    "United States (the)" nó bị bọc `.ant-select` và bị `.ant-select-selection-item` che
   //    -> `fill()` treo 30 s rồi timeout. Phải dùng `chon()`, không dùng `dien()`.
   //    Cũng còn một dropdown treo lại (`lopPhu: 1`) — bấm Escape cho rơi xuống.
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(1500);
+  await dongDropdown(page);
   const bangLaSelect = await page.evaluate(i => !!document.getElementById(i)?.closest('.ant-select'), F.bang);
   log('dien bang (' + (bangLaSelect ? 'select' : 'o thuong') + ')');
   // 🔴 Nhãn bang trên Lecangs là dạng `Texas【TX】` — ngoặc vuông TOÀN RỘNG 【】,
@@ -254,17 +382,54 @@ export async function taoDonParcel(page, don, { guiThat = false, log = () => {} 
   log('chon carrier'); await chon(page, F.carrier, 'UPS');   // tài liệu: LUÔN
   log('dien tracking'); await dien(page, F.tracking, don.tracking);
 
+  // --- Upload file shipping label ---
+  // 🔴 Trang có HAI ô file. Chọn đúng ô nhãn "Upload the Label":
+  //      #form_item_planningNo   accept ".png,.pdf,.jpg,.jpeg,.gif,.zpl"  <- ĐÚNG
+  //      #form_item_omsTocFiles  accept ".pdf"  nhãn "Attachments"        <- SAI
+  //    Dùng setInputFiles thẳng vào input ẩn, không cần bấm "Click on the Upload".
+  if (don.duongDanLabel) {
+    log('upload label');
+    await page.setInputFiles(`#${F.fileLabel}`, don.duongDanLabel);
+    await page.waitForTimeout(9000);
+  }
+
+  // --- Add the goods: thêm MỘT dòng hàng ---
+  // Không phải hộp thoại mà là DÒNG trong bảng: SKU · Name of Goods · Available Quantity ·
+  // Shipment Qty · Unit Price · HS Code · Action.
+  let hang = null;
+  if (don.sku) {
+    log('add the goods');
+    await page.locator('button').filter({ hasText: 'Add the goods' }).first().click({ timeout: 20000 });
+    await page.waitForTimeout(7000);
+    hang = await dienDongHang(page, don.sku);   // Shipment Qty LUÔN = 1 (quy trình)
+  }
+
+  /* 🔴 Đọc lại cho ĐÚNG: với ô Ant Select, `input.value` LUÔN RỖNG — đó chỉ là ô tìm.
+   *    Giá trị đã chọn nằm ở `.ant-select-selection-item`. Đọc nhầm chỗ sẽ báo "trống"
+   *    cho cả 5 ô kho/platform/country/state/carrier dù chúng đã điền đúng. */
   const daDien = await page.evaluate(f => {
-    const v = i => (document.getElementById(i) || {}).value ?? null;
-    return Object.fromEntries(Object.entries(f).map(([k, i]) => [k, v(i)]));
+    const doc = i => {
+      const e = document.getElementById(i);
+      if (!e) return null;
+      const sel = e.closest('.ant-select');
+      if (sel) return (sel.querySelector('.ant-select-selection-item')?.textContent || '').trim();
+      if (e.type === 'file') return e.files?.length ? e.files[0].name : '';
+      return e.value ?? null;
+    };
+    return Object.fromEntries(Object.entries(f).map(([k, i]) => [k, doc(i)]));
   }, F);
 
   if (!guiThat) {
-    return { daDien, daGui: false,
-      ghiChu: 'CHUA bam "Save & Submit" — con thieu: upload file label, "Add the goods" ' +
-              '(SKU + Shipment Qty = 1). Truyen guiThat:true khi da san sang tao don THAT.' };
+    return { daDien, hang, daGui: false,
+      ghiChu: 'Da dien XONG toan bo. CHUA bam "Save & Submit" — do la buoc tao don THAT ' +
+              'tren Lecangs. Truyen guiThat:true khi that su muon gui.' };
   }
-  throw new Error('taoDonParcel: guiThat=true nhung buoc upload file va "Add the goods" CHUA VIET — khong duoc submit thieu du lieu');
+  /* ⛔ Bấm nút này là TẠO ĐƠN THẬT trên Lecangs. */
+  log('SAVE & SUBMIT (tao don THAT)');
+  await dongPopup(page);
+  await page.locator('button').filter({ hasText: /^Save & Submit$/ }).first().click({ timeout: 25000 });
+  await page.waitForTimeout(12000);
+  return { daDien, hang, daGui: true, url: page.url() };
 }
 
 export { F as O_LECANGS };
