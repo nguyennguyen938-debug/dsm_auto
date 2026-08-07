@@ -7,11 +7,9 @@ Người dùng mô tả **06/08/2026**. Đây là bản chép lại nguyên văn
 > trình riêng đầy đủ**: tạo shipping label trên UPS, đẩy đơn sang Lecangs, và **ghi Tracking
 > Number vào cột N**. Code hiện tại CHƯA làm gì trong số này.
 
-> ✅ **Đã có 2 bảng tra (07/08):** `05_TraCuu/warehouse_ranking_by_state.csv` ·
-> `05_TraCuu/dims_sku.csv`. Bảng đối chiếu tên kho **không cần nữa** — Lecangs và UPS nay dùng
-> cùng tên (chốt 07/08).
->
-> 🔴 **NHƯNG `dims_sku.csv` KHÔNG DÙNG ĐƯỢC cho SKU đuôi `-B`** — xem mục cuối file.
+> ✅ **Đã có đủ bảng tra (07/08):** `05_TraCuu/warehouse_ranking_by_state.csv` ·
+> `05_TraCuu/dims_sku.csv` (523 SKU, số liệu đã đầy đủ cho nhóm dự án dùng).
+> Bảng đối chiếu tên kho **không cần** — Lecangs và UPS nay dùng cùng tên.
 
 ---
 
@@ -252,38 +250,35 @@ Trong folder `PO - <PO>` của đơn Ground:
 
 ---
 
-## 🔴 `dims_sku.csv` — CÁI BẪY PHẢI BIẾT
+## ✅ `dims_sku.csv` — đã có đủ số liệu (07/08/2026)
 
-File có 528 SKU, nhưng **SKU đuôi `-B` (loại dự án dùng cho đơn Misc) đều ghi `0.0`** cho cả
-kích thước lẫn cân nặng. Và **bản SỐ cùng mã KHÔNG phải cùng sản phẩm**:
+523 SKU. Tra bằng **Model Number NGUYÊN VẸN, GIỮ hậu tố `-B`**.
 
-```
-812250     26x26x3   31 lb   "Hevea Butcher Block Counter Top - 2FTx25""        ← tấm 2 ft
-812250-B   0x0x0      0 lb   "12Ft Unfinished Hevea Butcher Block Counter Top"  ← tấm 12 ft
-```
+> ⛔ **KHÔNG bỏ hậu tố `-B` rồi tra bản số.** Đó là **sản phẩm khác**:
+> ```
+> 812250     26x26x3   31 lb   "Hevea Butcher Block Counter Top - 2FTx25""   ← tấm 2 ft
+> 812250-B  146x27x2  128 lb   "12Ft Unfinished Hevea Butcher Block"         ← tấm 12 ft
+> ```
+> `skuTuModel()` trong `bol-tinh.mjs` **CÓ** bỏ hậu tố — đúng cho `pallet.csv`, **SAI cho file này**.
+> Nhánh Ground phải tra bằng chuỗi Model Number gốc.
 
-⛔ **TUYỆT ĐỐI KHÔNG bỏ hậu tố `-B` rồi tra bản số.** Làm vậy sẽ lấy cân nặng tấm 2 ft (31 lb)
-gán cho tấm 12 ft (~128 lb) — sai gấp 4 lần trên nhãn vận chuyển thật.
-(Lưu ý `skuTuModel()` trong `bol-tinh.mjs` CÓ bỏ hậu tố — đúng cho `pallet.csv`, **sai cho file này**.)
+**Đối chiếu chéo với `pallet.csv` — 10/10 khớp tuyệt đối:**
 
-**Kiểm trên SKU thật của 10 đơn Ground trong lô 28 đơn: dùng được 6/8.**
-
-| SKU | Trạng thái |
+| | |
 |---|---|
-| `833250` `814300` `838250` `815253` `836250` `834250` | ✅ có số liệu thật |
-| `816390-B` `838250-B` | ❌ toàn `0.0` |
+| `Carton Weight` của bản `-B` | **bằng đúng cột K** (Packaged Gross Weight) của `pallet.csv` |
+| `Carton Len` | **= chiều dài sản phẩm (cột C) + 2 in**, đều đặn cả 10 dòng |
 
-Ngoài ra **thiếu hẳn**: `810250` · `818390` · `830250` · `838390` (bản số).
-Trong đó `818390` và `838390` nằm trong **4 SKU ngoại lệ** nên chắc chắn sẽ gặp.
+Điều này cũng giải thích công thức cũ: BOL của đơn Misc dùng `Σ(K×Qty) + 55`, trong đó `K` là
+cân nặng **một thùng** còn `+55` là **pallet**. Đơn Ground đi UPS từng thùng lẻ, không có pallet,
+nên `Weight per Package` = **đúng `Carton Weight`, KHÔNG cộng 55**.
 
-→ **Cần người dùng bổ sung số liệu cho các SKU `-B` và 4 SKU còn thiếu**, nếu không đơn dùng
-chúng sẽ phải gạt sang danh sách chờ.
-
----
+Còn 125/523 SKU vẫn để `0` — đều **không thuộc nhóm dự án dùng**. Gặp SKU như vậy thì gạt sang
+danh sách chờ, đừng gửi `0` lên UPS.
 
 ## ❓ Câu hỏi còn mở
 
 1. ~~Quy tắc ±15:00 có áp cho Misc không?~~ → **KHÔNG** (chốt 07/08). Misc giữ công thức cũ.
 2. ~~`makeFolder` cần đường bỏ trần cho Ground~~ → **xong 07/08** (`boQuaTran`), **cần deploy**.
 3. ~~Lecangs có MFA không?~~ → **KHÔNG**, user + password thường (chốt 07/08).
-4. **Số liệu carton cho SKU `-B` và 4 SKU thiếu** — xem mục trên.
+4. ~~Số liệu carton cho SKU `-B`~~ → **đã có đủ 07/08**, đối chiếu `pallet.csv` khớp 10/10.
