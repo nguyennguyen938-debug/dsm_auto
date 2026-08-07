@@ -217,10 +217,18 @@ export async function vaoUps(page) {
   await page.waitForTimeout(10000);
   const r = await page.evaluate(() => ({
     url: location.href,
+    tieuDe: document.title,
     coNutLogIn: /\bLog In\b/.test(document.body.innerText.slice(0, 2000)),
     coOPass: document.querySelectorAll('input[type=password]').length > 0
   }));
-  if (!r.coNutLogIn && !r.coOPass) return { ok: true };
+  // 🔴 Trang "Access Denied" của Akamai KHONG co chu "Log In" va KHONG co o mat khau,
+  //    nen hai dieu kien duoi day deu dung -> ham nay tung bao ok:true khi that ra da
+  //    mat phien (gap 07/08/2026, bao nham roi chay tiep xuong form). Phai kiem CA URL.
+  const biday = /\/lasso\/login|\/lasso\/error/.test(r.url);
+  const chan = /Access Denied/i.test(r.tieuDe);
+  if (chan) throw new Error('UPS: Akamai tra "Access Denied" — cookie _abck bi danh dau bot. ' +
+                            'Dang nhap tay qua VNC: 10_VM_Tool/vnc.sh bat && ./vnc.sh trinhduyet');
+  if (!biday && !r.coNutLogIn && !r.coOPass) return { ok: true };
   throw new Error('UPS het phien. Vao VNC dang nhap tay: 10_VM_Tool/vnc.sh bat && ./vnc.sh trinhduyet. ' +
                   'Tai khoan la "allforwood" (KHONG phai email). Nho tich "Remember this device for 30 days".');
 }

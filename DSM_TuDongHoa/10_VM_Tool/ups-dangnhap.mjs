@@ -41,6 +41,17 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { docCreds, layMaUps } from './phien.mjs';
 
+/* 🔴 CANH BAO — LOI DA GAY THIET HAI THAT, 07/08/2026.
+ * `phien.mjs` tinh hang `PROFILE` NGAY LUC NAP MODULE:
+ *     export const PROFILE = process.env.DSM_PROFILE || <mac dinh .profile-ground>
+ * Dat `process.env.DSM_PROFILE` SAU cau `import` la VO NGHIA — import da chay xong.
+ * Vi loi nay, `node ups-dangnhap.mjs --thu` tuong chay tren ban sao `.profile-thu`
+ * nhung THUC TE chay tren `.profile-ground` that, va `xoaCookieAkamai()` xoa luon
+ * cookie phien UPS dang song. Phai khoi phuc tu ban sao luu.
+ * -> Doi profile PHAI lam bang bien moi truong TU BEN NGOAI:
+ *        DSM_PROFILE=/duong/dan/.profile-thu node ups-dangnhap.mjs
+ *    KHONG bao gio dat lai trong code sau khi da import phien.mjs. */
+
 const GOC = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const LOG = path.join(GOC, '11_TaiVe', 'logs');
 
@@ -205,9 +216,14 @@ export async function dangNhapUps(page, ctx) {
 
 /* ------------------------------------------------------------- chạy thử ---- */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const thu = process.argv.includes('--thu');
-  if (thu) process.env.DSM_PROFILE = path.join(GOC, '11_TaiVe', '.profile-thu');
-  console.log(`profile: ${process.env.DSM_PROFILE || '(mac dinh .profile-ground)'}`);
+  // KHONG dat process.env.DSM_PROFILE o day — xem canh bao dau file. Phai truyen tu ngoai.
+  const { PROFILE } = await import('./phien.mjs');
+  console.log(`profile dang dung THAT SU: ${PROFILE}`);
+  if (process.argv.includes('--thu') && /\.profile-ground$/.test(PROFILE)) {
+    console.log('DUNG LAI: --thu nhung dang tro vao .profile-ground (profile THAT).\n' +
+                'Chay dung cach:  DSM_PROFILE=<duong/dan>/.profile-thu node ups-dangnhap.mjs --thu');
+    process.exit(2);
+  }
   // PHAI di duong CDP: Playwright tu khoi chay thi Akamai chan — xem chu thich moContextCDP
   const { moContextCDP } = await import('./phien.mjs');
   const ket = await moContextCDP();
