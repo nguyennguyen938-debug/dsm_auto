@@ -104,12 +104,60 @@ export async function vaoLecangs(page) {
 /* ------------------------------------------------------------------- UPS ---- */
 
 const UPS_BANG = 'https://www.ups.com/ppc/dashboard.html?loc=en_US#/companyDashboard';
+const WEBAPP = process.env.DSM_WEBAPP ||
+  'https://script.google.com/macros/s/AKfycbzzJCEgWBcO76OcbhJIdiHGlJEgbWxq7FFEGbIwwpQe2gmtOalVOXziJXFyuI1Ckrtn-Q/exec';
+
+/**
+ * Lấy mã MFA của UPS từ hộp thư `info@allforwood.com`, qua web app Apps Script
+ * (action `maUps` trong `02_AppsScript/MaDangNhap_UPS.gs`). Không cần mật khẩu Gmail.
+ *
+ * 🔴 BA ĐIỀU PHẢI NHỚ:
+ *  1. Mã trả về là **CHUỖI**, có thể bắt đầu bằng số 0 (đã gặp `061310`).
+ *     Đừng parseInt, đừng Number() — mất số 0 đầu là mã sai.
+ *  2. Web app chỉ nhìn lại 5 phút, đúng bằng hạn UPS ghi trong thư. Nên PHẢI
+ *     bấm "gửi mã" TRƯỚC rồi mới gọi hàm này, không phải ngược lại.
+ *  3. Thư đến chậm vài chục giây. Hàm tự hỏi lại mỗi `nhip` giây cho tới `choToiDa`.
+ *
+ * @param maCu mã của lần trước (nếu có) — để không nhận nhầm lại mã cũ chưa hết hạn.
+ * @returns chuỗi mã, hoặc ném lỗi nếu quá hạn chờ.
+ */
+export async function layMaUps({ maCu = null, choToiDa = 150, nhip = 10 } = {}) {
+  const khoa = (await docCreds('upsMa')).khoa;
+  if (!khoa) throw new Error('creds.json thieu upsMa.khoa — chay TAO_KHOA_UPS() trong Apps Script');
+
+  const hetLuc = Date.now() + choToiDa * 1000;
+  let lanCuoi = '(chua goi)';
+  while (Date.now() < hetLuc) {
+    const u = `${WEBAPP}?action=maUps&khoa=${encodeURIComponent(khoa)}&phut=5`;
+    let o = null;
+    try {
+      const r = await fetch(u, { redirect: 'follow' });
+      const t = await r.text();
+      // Apps Script thinh thoang tra nguyen trang HTML — bo qua, vong sau goi lai
+      if (t.trim().startsWith('<')) { lanCuoi = 'web app tra HTML'; }
+      else o = JSON.parse(t);
+    } catch (e) { lanCuoi = e.message.slice(0, 80); }
+
+    if (o) {
+      if (o.ok === false) throw new Error(`maUps tu choi: ${o.error}`);   // khoa sai -> dung han
+      if (o.ma && o.ma !== maCu) return String(o.ma);
+      lanCuoi = o.ma ? `van la ma cu ${o.ma}` : (o.ghiChu || 'chua co thu');
+    }
+    await new Promise(r => setTimeout(r, nhip * 1000));
+  }
+  throw new Error(`khong lay duoc ma UPS sau ${choToiDa}s (lan cuoi: ${lanCuoi}). ` +
+                  'Kiem: da bam gui ma chua, va thu co ve info@allforwood.com khong.');
+}
 
 /**
  * Đảm bảo đã đăng nhập UPS.
- * Còn phiên thì thôi. Hết phiên thì BÁO LỖI chứ không tự đăng nhập: UPS có MFA,
- * và dù "Remember this device" còn hiệu lực thì bước nhập mã vẫn có thể hiện ra.
- * Tự động hoá chỗ này cần đọc được hộp thư `info@allforwood.com` — chưa có.
+ * Còn phiên thì thôi. Hết phiên thì BÁO LỖI chứ không tự đăng nhập.
+ *
+ * ⚠️ Mã MFA giờ đã lấy tự động được (`layMaUps()`), nhưng vẫn CỐ Ý không tự đăng nhập:
+ *    `creds.json` ghi `ups.user = info@allforwood.com`, còn CLAUDE.md mục 8 ghi tên
+ *    đăng nhập thật là `allforwood`. Hai nguồn nói khác nhau, chưa ai xác nhận cái nào
+ *    đúng. Đăng nhập sai tên là đúng con đường đã làm hỏng tài khoản Lecangs
+ *    (6 lần sai). Chốt được tên đăng nhập rồi mới nối `layMaUps()` vào đây.
  */
 export async function vaoUps(page) {
   await page.goto(UPS_BANG, { waitUntil: 'domcontentloaded', timeout: 90000 });

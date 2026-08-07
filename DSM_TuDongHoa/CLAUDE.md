@@ -110,7 +110,7 @@ Dấu hiệu người làm tay: `x` **viết thường** ở cột J/M (script l
 | `needSlip` | **GET** `?action=needSlip[&checkSlip=1]` hoặc POST | `o.pos` |
 | `lookup` | **GET** `?action=lookup&pos=a,b` hoặc POST `{pos:[...]}` | `o.rows` |
 | `donDepManifest` | **GET** `?action=donDepManifest[&thatSu=1]` — dọn `_INBOX`: manifest + file gộp + slip đã vào folder PO | `o.xoa` |
-| `maUps` | **GET** `?action=maUps&khoa=<KHOA>[&phut=10]` — lấy mã MFA của UPS từ Gmail. ⛔ **Bắt buộc có khoá**; khoá nằm trong Script Properties, không nằm trong code | `o.ma` (có thể `null`) |
+| `maUps` | **GET** `?action=maUps&khoa=<KHOA>[&phut=5]` — mã MFA của UPS từ Gmail. ⛔ Bắt buộc có khoá (Script Properties, không vào git). Phía VM gọi bằng `phien.mjs → layMaUps()` | `o.ma` — **CHUỖI**, có thể `null`, có thể bắt đầu bằng **số 0** |
 | `makeFolder` | POST `{action:'makeFolder', po, pickupSchedule, boQuaTran?}` — `boQuaTran:true` cho đơn **Ground** (không áp trần 20/ngày) | `o.folderId` |
 | `fillRow` | POST `{action:'fillRow', po, carrier, ..., skipCap:true}` | `o.row` |
 | upload file | POST `{folderId, filename, base64, mimeType}` | `o.id` |
@@ -245,7 +245,7 @@ Dùng `chromium.launchPersistentContext('11_TaiVe/.profile-ground', {...})`.
 | Site | Đăng nhập | Ghi chú |
 |---|---|---|
 | Lecangs | `sue.nguyen@allforwood.com` | Không MFA. `creds.json` có mật khẩu nhưng **đăng nhập bằng nó vẫn báo sai** — hoặc mật khẩu lệch, hoặc tài khoản đã khoá sau 6 lần thử. **ĐỪNG thử thêm.** Phiên trong profile vẫn dùng tốt |
-| UPS | `allforwood` (KHÔNG phải email — email chỉ là tên hiển thị) | Có MFA. Đã tích *Remember this device 30 days* → hết hạn khoảng **06/09/2026** thì phải đăng nhập tay lại |
+| UPS | ❓ **hai nguồn nói khác nhau — chờ chốt**: CLAUDE.md ghi `allforwood`, `creds.json` ghi `info@allforwood.com` | Có MFA. **Mã MFA nay lấy tự động được** (`layMaUps()`, kiểm thật 07/08). Nhưng CHƯA nối vào đăng nhập tự động vì chưa chốt tên đăng nhập — sai tên là đúng vết xe Lecangs. Đã tích *Remember this device 30 days* → hết hạn khoảng **06/09/2026** |
 | AACT | `info@allforwood.com` | Không MFA, `creds.json` đăng nhập được bình thường |
 
 🔴 **UPS BẮT BUỘC chạy headful trên Xvfb** — headless bị Akamai chặn (`ERR_HTTP2_PROTOCOL_ERROR`),
