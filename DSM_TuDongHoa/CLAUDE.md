@@ -36,6 +36,12 @@ Claude Code đọc file này tự động. Đây là bản tóm tắt **đã ki�
 8. Trả lời **ngắn gọn, tiếng Việt**.
 9. Phát hiện bug hay cách làm nhanh hơn thì **ghi vào file hướng dẫn tương ứng** — đó là cách dự án
    không mất kinh nghiệm khi đổi máy/đổi công cụ.
+10. 🔴 **MÁY NÀY CHẠY CHUNG VỚI DỰ ÁN KHÁC** — `/opt/wayfair` (cron `35 8 * * *`, có `CLAUDE.md`
+    riêng, cũng dùng Xvfb/x11vnc/websockify và MCP `playwright`).
+    **Giết tiến trình phải theo PID đã ghi lại lúc tạo**, hoặc lọc theo `DISPLAY :99`.
+    ⛔ **KHÔNG dùng `pgrep -x <tên>` rồi kill hàng loạt, KHÔNG dùng `pkill -f`.**
+    Đã sập hai lần 06–07/08: `pkill -f` khớp phải chính dòng lệnh của shell nên tự giết mình;
+    `pgrep -x x11vnc` giết luôn x11vnc của Wayfair (`caught signal: 15` trong log của họ).
 
 ---
 
@@ -244,7 +250,10 @@ parser chọn carrier **24/24 khớp cột C**.
 
 ### 🔴 VIỆC CÒN TREO — chờ người dùng quyết
 
-**1. CTII — CHƯA CHO SUBMIT.** Người dùng chốt phải dừng trước nút Submit, chưa quyết khi nào mở.
+**1. CTII — TẠM KHÔNG XỬ LÝ (chốt 07/08/2026).** Người dùng sẽ cập nhật lại sau; **đừng tự bật**.
+Hiện `xu-ly-don.mjs` bỏ qua toàn bộ đơn CTII ở dòng 143, và `ctii.mjs` **không có hàm nào bấm
+`bSubmit`** (chỉ nhắc tới trong comment). Trạng thái này là ĐÚNG như mong muốn, không phải việc
+chưa làm xong.
 `ctii.mjs` điền được trọn form và `datYeuCau()` kiểm đủ điều kiện, nhưng **không có hàm nào bấm
 `bSubmit`**. Submit CTII tạo **lệnh pickup thật với Central Transport, không huỷ được** — và form
 BOL của họ **mở công khai không cần đăng nhập**, nên không có rào cản nào ngoài chính đoạn code này.
