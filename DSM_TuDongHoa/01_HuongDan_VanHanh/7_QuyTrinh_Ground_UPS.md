@@ -7,7 +7,11 @@ Người dùng mô tả **06/08/2026**. Đây là bản chép lại nguyên văn
 > trình riêng đầy đủ**: tạo shipping label trên UPS, đẩy đơn sang Lecangs, và **ghi Tracking
 > Number vào cột N**. Code hiện tại CHƯA làm gì trong số này.
 
-> 🔴 **CÒN 3 BẢNG TRA NGƯỜI DÙNG CHƯA GỬI** — xem cuối file. Thiếu chúng thì không chạy được.
+> ✅ **Đã có 2 bảng tra (07/08):** `05_TraCuu/warehouse_ranking_by_state.csv` ·
+> `05_TraCuu/dims_sku.csv`. Bảng đối chiếu tên kho **không cần nữa** — Lecangs và UPS nay dùng
+> cùng tên (chốt 07/08).
+>
+> 🔴 **NHƯNG `dims_sku.csv` KHÔNG DÙNG ĐƯỢC cho SKU đuôi `-B`** — xem mục cuối file.
 
 ---
 
@@ -18,8 +22,9 @@ Theo `1_DocPackingSlip.md`.
 
 ### Bước 2: Chọn kho
 
-1. Dựa theo **tiểu bang**, đối chiếu **bảng ①** (chưa có) → danh sách kho xếp theo thứ tự
-   **gần nhất → xa nhất**.
+1. Dựa theo **tiểu bang**, tra `05_TraCuu/warehouse_ranking_by_state.csv` → danh sách kho xếp
+   theo thứ tự **gần nhất → xa nhất**. 50 bang, 6 kho: `Calhoun` · `MEM-R` · `SAV` · `HOU07` ·
+   `NJF02` · `CAP`.
 2. Vào `https://app.lecangs.com/oms/inventory`, điền **SKU** vào ô, ấn **Search** bên phải
    → hiện danh sách kho.
 3. Chọn **kho còn hàng gần nhất** — xem cột **Available Stock** để biết còn hàng hay không.
@@ -54,7 +59,7 @@ Tài khoản `info@allforwood.com`. Sau khi nhập mật khẩu ấn **Continue*
 
 | Ô | Giá trị |
 |---|---|
-| **Ship From / Return To** | Ấn **edit** → mục **My address** ấn dropdown → chọn kho trùng với kho tìm được ở Bước 2 → **Continue**. ⚠️ Tên kho trong danh sách UPS **khác** tên khi tra Lecangs — cần **bảng ③** (chưa có) |
+| **Ship From / Return To** | Ấn **edit** → mục **My address** ấn dropdown → chọn kho trùng với kho tìm được ở Bước 2 → **Continue**. ✅ Tên kho ở UPS và Lecangs **nay giống nhau** (chốt 07/08), không cần bảng đối chiếu |
 | **Saved Addresses** | `Enter New Address` (đang là vậy thì giữ nguyên) |
 | **Country or Territory** | `United States` (đang là vậy thì giữ nguyên) |
 | **Full Name or Company Name** | Tên khách. **Store thì KHÔNG điền phần `C/O ...`** |
@@ -83,8 +88,8 @@ Với từng package:
 | Ô | Giá trị |
 |---|---|
 | **Total Identical Packages** | Qty Shipped của SKU đó |
-| **Weight per Package** | Tra **bảng ②** (chưa có) |
-| **Length · Width · Height** | Tra **bảng ②** (chưa có) |
+| **Weight per Package** | `Carton Weight (lb)` trong `05_TraCuu/dims_sku.csv` |
+| **Length · Width · Height** | `Carton Len/Wid/Hgt (in)` cùng file |
 | **Total Package Value** | để trống |
 | **Reference #1** | số PO |
 
@@ -244,19 +249,38 @@ Trong folder `PO - <PO>` của đơn Ground:
 
 ---
 
-## 🔴 CÒN THIẾU — người dùng sẽ gửi
+## 🔴 `dims_sku.csv` — CÁI BẪY PHẢI BIẾT
 
-| # | Bảng | Dùng ở |
-|---|---|---|
-| ① | **Tiểu bang → danh sách kho** xếp theo gần nhất | Phần 1, Bước 2 |
-| ② | **SKU → Weight per Package + Length/Width/Height** | Phần 1, Mục 2 |
-| ③ | **Đối chiếu tên kho: Lecangs ↔ UPS** | Phần 1, Mục 1 |
+File có 528 SKU, nhưng **SKU đuôi `-B` (loại dự án dùng cho đơn Misc) đều ghi `0.0`** cho cả
+kích thước lẫn cân nặng. Và **bản SỐ cùng mã KHÔNG phải cùng sản phẩm**:
 
-Chưa có đủ ba bảng này thì **không cài đặt được**.
+```
+812250     26x26x3   31 lb   "Hevea Butcher Block Counter Top - 2FTx25""        ← tấm 2 ft
+812250-B   0x0x0      0 lb   "12Ft Unfinished Hevea Butcher Block Counter Top"  ← tấm 12 ft
+```
+
+⛔ **TUYỆT ĐỐI KHÔNG bỏ hậu tố `-B` rồi tra bản số.** Làm vậy sẽ lấy cân nặng tấm 2 ft (31 lb)
+gán cho tấm 12 ft (~128 lb) — sai gấp 4 lần trên nhãn vận chuyển thật.
+(Lưu ý `skuTuModel()` trong `bol-tinh.mjs` CÓ bỏ hậu tố — đúng cho `pallet.csv`, **sai cho file này**.)
+
+**Kiểm trên SKU thật của 10 đơn Ground trong lô 28 đơn: dùng được 6/8.**
+
+| SKU | Trạng thái |
+|---|---|
+| `833250` `814300` `838250` `815253` `836250` `834250` | ✅ có số liệu thật |
+| `816390-B` `838250-B` | ❌ toàn `0.0` |
+
+Ngoài ra **thiếu hẳn**: `810250` · `818390` · `830250` · `838390` (bản số).
+Trong đó `818390` và `838390` nằm trong **4 SKU ngoại lệ** nên chắc chắn sẽ gặp.
+
+→ **Cần người dùng bổ sung số liệu cho các SKU `-B` và 4 SKU còn thiếu**, nếu không đơn dùng
+chúng sẽ phải gạt sang danh sách chờ.
+
+---
 
 ## ❓ Câu hỏi còn mở
 
-1. **Quy tắc ±15:00 có áp cho đơn Misc không?** Người dùng dặn hỏi lại. Hiện Misc dùng công thức
-   cũ (hôm nay + T6 `+3` / T7 `+2` / còn lại `+1`), không xét giờ.
-2. **`makeFolder` cần đường bỏ trần cho Ground** — chưa cài.
-3. Đăng nhập **Lecangs** dùng tài khoản nào? Có MFA không? (UPS thì đã rõ: có MFA qua email.)
+1. ~~Quy tắc ±15:00 có áp cho Misc không?~~ → **KHÔNG** (chốt 07/08). Misc giữ công thức cũ.
+2. **`makeFolder` cần đường bỏ trần cho Ground** — chưa cài, phải sửa `NhanFile_Drive_WebApp.gs`.
+3. ~~Lecangs có MFA không?~~ → **KHÔNG**, user + password thường (chốt 07/08).
+4. **Số liệu carton cho SKU `-B` và 4 SKU thiếu** — xem mục trên.
