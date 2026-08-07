@@ -54,9 +54,23 @@ Tài khoản `info@allforwood.com`. Sau khi nhập mật khẩu ấn **Continue*
 3. **BẮT BUỘC tích `Remember this device for 30 days`** — nếu không thì mỗi lần chạy đều phải
    lấy mã qua mail
 
-> 🔴 **Hệ quả kỹ thuật:** "nhớ thiết bị 30 ngày" gắn với **profile trình duyệt**. Muốn tự động thì
-> phải chạy Playwright với `--user-data-dir` CỐ ĐỊNH và giữ nguyên profile đó; mở context mới mỗi
-> lần là mất, và MFA sẽ hỏi lại. Đây là khác biệt lớn so với AACT (không MFA).
+> 🔴 **Hệ quả kỹ thuật 1 — PROFILE CỐ ĐỊNH.** "Nhớ thiết bị 30 ngày" gắn với **profile trình
+> duyệt**, không gắn với tài khoản. Phải dùng `chromium.launchPersistentContext()` trỏ vào
+> `11_TaiVe/.profile-ground`; mở context tạm là mất, MFA hỏi lại.
+>
+> 🔴 **Hệ quả kỹ thuật 2 — BẮT BUỘC CHẠY HEADFUL.** Khảo sát 07/08:
+>
+> | Cách gọi `www.ups.com` | Kết quả |
+> |---|---|
+> | `curl` trần | `ERR_HTTP2 INTERNAL_ERROR` |
+> | `curl` + `sec-ch-ua`, `sec-fetch-mode`, `accept`… | **200** |
+> | Playwright **headless** (kể cả đã đặt `userAgent` thật) | `ERR_HTTP2_PROTOCOL_ERROR` |
+> | Playwright **headful trên `DISPLAY=:99`** | **✅ vào được** |
+>
+> Akamai của UPS lọc theo **dấu vết trình duyệt**, KHÔNG phải chặn IP — `aaacooper.com` và
+> `app.lecangs.com` từ cùng VM này vẫn `200` bình thường. Đổi `userAgent` không đủ.
+> → Nhánh UPS phải chạy **headful trên màn hình ảo Xvfb**, không dùng `headless: true` được.
+> (Dựng màn hình bằng `10_VM_Tool/vnc.sh bat`.)
 
 #### Mục 1 — Where
 
