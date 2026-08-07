@@ -8,7 +8,9 @@
  *  B) base64 file  : { folderId, filename, base64, mimeType }
  *       (folderId = folder <PO> con, tạo bằng makeFolder trước)
  *
- *  C) TẠO FOLDER <PO> : { action:'makeFolder', po }
+ *  C) TẠO FOLDER <PO> : { action:'makeFolder', po, pickupSchedule, boQuaTran? }
+ *       boQuaTran:true -> KHONG ap tran MAX_PER_DAY (dung cho don GROUND, di UPS
+ *       chu khong dung xe tai LTL nen khong co ly do bi doi ngay).
  *       -> tạo (hoặc lấy) folder tên = PO trong PARENT, set "Anyone with link - Viewer",
  *          trả { folderId, url }.
  *
@@ -129,8 +131,19 @@ function _makeFolder(body) {
   var sh = SpreadsheetApp.openById(SHEET_CFG.SHEET_ID).getSheetByName(SHEET_CFG.SHEET_NAME);
   var wanted = String(body.pickupSchedule || '').trim();
   if (!wanted) throw new Error('makeFolder: thiếu pickupSchedule (cần để đặt tên folder ngày)');
-  var pk = _resolvePickupDate(sh, wanted, 0);          // áp trần MAX_PER_DAY ngay tại đây
+
+  /* ĐƠN GROUND KHÔNG ÁP TRẦN (chốt 07/08/2026).
+   * Trần MAX_PER_DAY sinh ra để giới hạn số đơn LTL/pallet mỗi ngày pickup — xe tải
+   * chỉ chở được ngần ấy. Đơn Ground đi UPS, không dùng xe đó, nên không có lý do
+   * bị dời ngày. Dời nhầm thì folder ngày đặt sai tên và lệch với cột K.
+   *
+   * ⚠️ Bên gọi PHẢI truyền boQuaTran:true cho đơn Ground. Web app KHÔNG tự đoán
+   *    được đơn nào là Ground (nó chỉ thấy po + ngày, không thấy Ship Via). */
+  var boQuaTran = !!(body.boQuaTran === true || body.boQuaTran === '1' || body.boQuaTran === 1);
+  var pk = boQuaTran ? { date: wanted, moved: false }
+                     : _resolvePickupDate(sh, wanted, 0);   // áp trần MAX_PER_DAY
   var d = _keyToDate(_dayKey(pk.date));
+  if (!d || isNaN(d)) throw new Error('makeFolder: pickupSchedule "' + wanted + '" khong doc duoc thanh ngay');
 
   var root = DriveApp.getFolderById(PARENT_FOLDER_ID);
   var dayF = _childFolder(root, _dateFolderName(d));
@@ -144,7 +157,8 @@ function _makeFolder(body) {
     signedProFolderId: sgF.getId(),
     dayFolder: _dateFolderName(d), dayFolderId: dayF.getId(),
     pickupSchedule: pk.date,                 // NGÀY CHỐT — truyền lại cho fillRow
-    pickupRequested: wanted, pickupMoved: pk.moved
+    pickupRequested: wanted, pickupMoved: pk.moved,
+    boQuaTran: boQuaTran            // true = don Ground, khong ap tran MAX_PER_DAY
   });
 }
 

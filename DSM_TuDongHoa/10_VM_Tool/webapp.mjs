@@ -60,9 +60,14 @@ export async function lookup(pos) {
   return o.rows;
 }
 
-/** Chốt ngày pickup + tạo cây folder. PHẢI gọi TRƯỚC fillRow. */
-export const makeFolder = (po, pickupSchedule) =>
-  post({ action: 'makeFolder', po, pickupSchedule }, 'folderId');
+/**
+ * Chốt ngày pickup + tạo cây folder. PHẢI gọi TRƯỚC fillRow.
+ * @param boQuaTran true cho đơn GROUND — không áp trần 20 đơn/ngày. Trần đó để
+ *   giới hạn số đơn LTL mỗi chuyến xe; đơn Ground đi UPS nên không liên quan.
+ *   Web app KHÔNG tự đoán được đơn nào là Ground, bên gọi phải truyền.
+ */
+export const makeFolder = (po, pickupSchedule, boQuaTran = false) =>
+  post({ action: 'makeFolder', po, pickupSchedule, boQuaTran }, 'folderId');
 
 /** HTML -> PDF, lưu thẳng vào folder. */
 export const uploadHtml = (folderId, filename, html) =>

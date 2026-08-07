@@ -31,8 +31,8 @@ Claude Code đọc file này tự động. Đây là bản tóm tắt **đã ki�
    mức có slip trên Drive". Nay có quy trình riêng đầy đủ: UPS tạo shipping label → Lecangs →
    ghi Tracking Number vào **cột N**. Xem `01_HuongDan_VanHanh/7_QuyTrinh_Ground_UPS.md`.
    **Code hiện tại CHƯA làm gì trong số đó** — `xu-ly-don.mjs` vẫn bỏ qua đơn Ground.
-   ⚠️ Đơn Ground **KHÔNG áp trần 20 đơn/ngày** — `makeFolder` hiện luôn áp trần cho mọi đơn,
-   cần thêm đường bỏ qua, chưa có.
+   ✅ Đơn Ground **KHÔNG áp trần 20 đơn/ngày** — gọi `makeFolder` kèm `boQuaTran:true`
+   (làm 07/08). Web app KHÔNG tự đoán được đơn nào là Ground, **bên gọi phải truyền**.
 8. Trả lời **ngắn gọn, tiếng Việt**.
 9. Phát hiện bug hay cách làm nhanh hơn thì **ghi vào file hướng dẫn tương ứng** — đó là cách dự án
    không mất kinh nghiệm khi đổi máy/đổi công cụ.
@@ -105,7 +105,7 @@ Dấu hiệu người làm tay: `x` **viết thường** ở cột J/M (script l
 | `needSlip` | **GET** `?action=needSlip[&checkSlip=1]` hoặc POST | `o.pos` |
 | `lookup` | **GET** `?action=lookup&pos=a,b` hoặc POST `{pos:[...]}` | `o.rows` |
 | `donDepManifest` | **GET** `?action=donDepManifest[&thatSu=1]` — dọn `_INBOX`: manifest + file gộp + slip đã vào folder PO | `o.xoa` |
-| `makeFolder` | POST `{action:'makeFolder', po, pickupSchedule}` | `o.folderId` |
+| `makeFolder` | POST `{action:'makeFolder', po, pickupSchedule, boQuaTran?}` — `boQuaTran:true` cho đơn **Ground** (không áp trần 20/ngày) | `o.folderId` |
 | `fillRow` | POST `{action:'fillRow', po, carrier, ..., skipCap:true}` | `o.row` |
 | upload file | POST `{folderId, filename, base64, mimeType}` | `o.id` |
 | HTML→PDF | POST `{folderId, filename, html}` | `o.id` |

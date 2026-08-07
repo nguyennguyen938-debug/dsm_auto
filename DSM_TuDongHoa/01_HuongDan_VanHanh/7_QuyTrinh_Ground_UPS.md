@@ -232,9 +232,12 @@ Trước đây đơn Ground không được ghi gì. Nay **có gọi `makeFolder
 | **N** | **TẤT CẢ Tracking Number trong CÙNG MỘT Ô**, mỗi số một dòng |
 | P | link folder Drive |
 
-> 🔴 **Đơn Ground KHÔNG áp trần 20 đơn/ngày.** `makeFolder` hiện **luôn** áp `MAX_PER_DAY` cho
-> mọi đơn — cần thêm đường bỏ qua trần cho Ground, nếu không ngày pickup sẽ bị dời và folder ngày
-> đặt sai tên. **Đây là thay đổi phải làm trong `NhanFile_Drive_WebApp.gs`, chưa có.**
+> ✅ **Đơn Ground KHÔNG áp trần 20 đơn/ngày** — làm xong 07/08. Gọi `makeFolder` kèm
+> **`boQuaTran: true`** (`webapp.mjs`: `makeFolder(po, ngay, true)`).
+> Trần sinh ra để giới hạn số đơn LTL mỗi chuyến xe tải; đơn Ground đi UPS nên không liên quan.
+> ⚠️ Web app **không tự đoán** được đơn nào là Ground (nó chỉ thấy `po` + ngày, không thấy
+> Ship Via) — **bên gọi phải truyền cờ**. Quên là ngày bị dời và folder ngày đặt sai tên.
+> **Cần Deploy ▸ New version.**
 
 ---
 
@@ -281,6 +284,6 @@ chúng sẽ phải gạt sang danh sách chờ.
 ## ❓ Câu hỏi còn mở
 
 1. ~~Quy tắc ±15:00 có áp cho Misc không?~~ → **KHÔNG** (chốt 07/08). Misc giữ công thức cũ.
-2. **`makeFolder` cần đường bỏ trần cho Ground** — chưa cài, phải sửa `NhanFile_Drive_WebApp.gs`.
+2. ~~`makeFolder` cần đường bỏ trần cho Ground~~ → **xong 07/08** (`boQuaTran`), **cần deploy**.
 3. ~~Lecangs có MFA không?~~ → **KHÔNG**, user + password thường (chốt 07/08).
 4. **Số liệu carton cho SKU `-B` và 4 SKU thiếu** — xem mục trên.
