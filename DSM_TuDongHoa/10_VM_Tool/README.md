@@ -302,3 +302,91 @@ Mã **3** thì gặp thường xuyên (session hết hạn), cảnh báo mỗi l
       (OAuth/Frontegg, không có API key), nhiều khả năng **không tự động hoá được**.
 - [ ] Phần điền form carrier (AACT/CTII) bằng Playwright. Đây là phần giòn nhất,
       xem `../01_HuongDan_VanHanh/4_Playbook_AACT.md` lỗi #12–#20 trước khi bắt đầu.
+
+---
+
+# NHÁNH GROUND (UPS + Lecangs) — thêm 07–08/08/2026
+
+Quy trình: `01_HuongDan_VanHanh/7_QuyTrinh_Ground_UPS.md`.
+**Chạy riêng, chưa nối vào `xu-ly-don.mjs`** — `xu-ly-don` vẫn bỏ qua đơn Ground.
+
+| File | Làm gì | Trạng thái |
+|---|---|---|
+| `ground-tra.mjs` | Thuần dữ liệu: kho theo bang, dims theo SKU, ngày pickup Ground, tách địa chỉ store/khách lẻ | ✅ 22/22 test |
+| `lecangs.mjs` | Tra tồn kho, chọn kho gần nhất còn hàng, điền form tạo đơn parcel | ✅ chạy thật · ⛔ **`Save & Submit` chưa chạy lần nào** |
+| `ups-form.mjs` | Chọn kho gửi → Mục 1–5 → Review trên form UPS cũ | ✅ chạy thật · ❌ **chưa có `Pay and Get Label(s)`** |
+| `nap-cookie-ups.mjs` | Nạp phiên UPS từ máy người dùng vào profile | ✅ |
+| `do-phien-ups.mjs` | Đo phiên UPS sống bao lâu | ✅ đo được 21–34 phút |
+| `cdp.mjs` | Gắn vào Chrome đang mở qua CDP | ✅ |
+| `ups-dangnhap.mjs` | Đăng nhập UPS tự động | ⛔ **KHÔNG DÙNG ĐƯỢC** — Akamai chặn, xem dưới |
+
+## Cách chạy
+
+**1. Mở Chrome (một lần cho cả buổi)**
+```bash
+10_VM_Tool/vnc.sh bat          # dựng màn hình ảo :99 nếu chưa có
+DISPLAY=:99 chromium --user-data-dir=11_TaiVe/.profile-ground \
+  --remote-debugging-port=9223 \
+  --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader &
+```
+🔴 Ba cờ WebGL là **bắt buộc** — thiếu nó Cloudflare Turnstile không tick được, kể cả
+người thật ngồi bấm.
+
+**2. Nạp phiên UPS** (người dùng gửi cookie: dashboard UPS → F12 → Network → Copy as cURL)
+```bash
+node 10_VM_Tool/nap-cookie-ups.mjs /duong/dan/cookie.txt
+```
+⏱️ **Phiên sống ~20–35 phút. Nạp xong CHẠY NGAY**, đừng khảo sát trước.
+
+**3. Chạy trọn Mục 1 → Review** (dừng trước nút trả tiền)
+```js
+import { trang } from './cdp.mjs';
+import { chayFormUps } from './ups-form.mjs';
+const { p } = await trang();
+const r = await chayFormUps(p, {
+  kho: 'NJF02',            // từ lecangs.chonKho()
+  laKhachLe: true,         // slip ghi Residential
+  noiNhan: { tenKhach, diaChi1, diaChi2, city, zip, state, dienThoai },
+  kien:    { qty, lb, L, W, H, po },   // dims từ ground-tra.traDims()
+  pickup:  { ngay, po }                // ngày từ ground-tra.ngayPickupGround()
+}, { log: console.log });
+```
+
+**4. Tra tồn kho / chọn kho**
+```js
+import { traTonKho, chonKho } from './lecangs.mjs';
+import { docKhoTheoBang, khoUuTien } from './ground-tra.mjs';
+const { ds: uu } = khoUuTien(await docKhoTheoBang(), bang, model);
+const { hang }   = await traTonKho(p, model);   // model NGUYÊN VẸN, giữ hậu tố -B
+const { kho }    = chonKho(uu, hang, qty);
+```
+
+**5. Đo tuổi phiên**
+```bash
+node 10_VM_Tool/do-phien-ups.mjs 5 12     # kiểm mỗi 5 phút, tối đa 12 giờ
+```
+
+## ⛔ Đừng làm lại những việc này
+
+1. **Đăng nhập UPS tự động.** `/lasso/login` bị Akamai chặn với mọi trình duyệt trên VM.
+   Đã loại trừ: chặn IP (curl cùng IP vẫn `302`), cookie bẩn, cổng CDP, Firefox 153,
+   **Chromium Debian thật**, thiếu WebGL. Mỗi lần chạm có thể gia hạn thời gian bị chặn.
+
+2. **Vá dấu vết trình duyệt** (WebGL renderer, số nhân CPU, thiết bị âm thanh) để qua
+   Akamai. Người dùng đã hỏi, phiên trước **đã từ chối** — đó là né cơ chế chống bot.
+   Hướng thay thế đã chốt: **UPS Shipping API**.
+
+3. **Chạy lại cả script cho mỗi lần thử.** Dùng `cdp.mjs` gắn vào Chrome đang mở.
+
+## Bẫy đã chặn sẵn trong code — đừng gỡ ra
+
+- **Nhiều phần tử trùng**: 3 link "Create a Shipment" (2 ẩn), 2 nút `Continue`, `id` trùng.
+  → luôn đếm số khớp và lọc cái **nhìn thấy được**, đừng `.first()`.
+- **Ghi xong phải đọc lại**: điền `128` vào ô Weight, đọc ra `8` (đua với Angular).
+- **Popup "Try New Feature"** của Lecangs phủ kín form → mọi thao tác timeout 30 s.
+  `dongPopup()` **chỉ đóng popup đã biết**; hộp lạ thì dừng và hỏi.
+- **`select` Angular** có value `"901: 2"` → chọn theo **NHÃN**.
+- **`MEM R`** (UPS) vs **`MEM-R`** (CSV) → `chuanKho()` bỏ qua khác biệt.
+- **Bang trên Lecangs** là `Texas【TX】`, ngoặc toàn rộng.
+- **`kill -9` Chrome** → cookie không kịp ghi xuống đĩa. Luôn `SIGTERM` rồi chờ.
+- **VM 2 nhân**: quá 10 tab là CDP timeout. `chayFormUps()` dọn tab trước mỗi vòng.
