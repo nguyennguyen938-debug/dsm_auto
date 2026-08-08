@@ -472,3 +472,32 @@ Bố cục giống hệt `destination-cac_*`, chỉ đổi tiền tố.
 `My address` → chọn kho**. Danh sách kho đó **chỉ hiện khi ĐÃ ĐĂNG NHẬP**. Lúc khảo sát
 phiên đã chết nên trang ở chế độ khách (`#anonymous-profile`, "Log In / Sign Up"), không
 thấy dropdown kho. **Phải khảo sát lại với phiên còn sống.**
+
+
+---
+
+## ⛔ ĐĂNG NHẬP UPS TỰ ĐỘNG — ĐỪNG THỬ LẠI (chốt 08/08/2026)
+
+`www.ups.com/lasso/login` bị Akamai trả `Access Denied` với **mọi trình duyệt trên VM này**,
+kéo dài **hơn 12 tiếng** sau lần bị chặn đầu (tối 07/08 → sáng 08/08 vẫn chặn).
+
+Đã loại trừ, mỗi cái một phép đo:
+
+| Nghi ngờ | Kết quả |
+|---|---|
+| Chặn IP | ❌ `curl` cùng IP, không cookie, đủ header → `302` bình thường |
+| Cookie Akamai bẩn | ❌ profile trắng hoàn toàn cũng bị chặn |
+| Cổng gỡ lỗi CDP | ❌ bỏ `--remote-debugging-port` vẫn bị |
+| Dấu vết engine Chrome | ❌ **Firefox 153** cũng bị |
+| Bản "Chrome for Testing" của Playwright | ❌ **Chromium 151 bản Debian thật** cũng bị |
+| Thiếu WebGL | ❌ đã bật SwiftShader, vẫn bị |
+
+Khác biệt duy nhất còn lại giữa `curl` (qua) và trình duyệt (không qua): **trình duyệt chạy
+JavaScript**, nên bị script cảm biến của Akamai chấm điểm. Môi trường VM lộ ra hàng loạt dấu
+hiệu: WebGL renderer ghi thẳng `SwiftShader`, 2 nhân CPU, 4 GB RAM, không thiết bị âm thanh.
+
+⛔ **Muốn qua phải giả mạo các thông số đó = né cơ chế chống bot. KHÔNG LÀM.**
+
+→ **Cách chính thức của nhánh này là nạp cookie từ máy người dùng** (`nap-cookie-ups.mjs`).
+   Đó không phải giải pháp tạm — nó là cách làm.
+→ Mỗi lần chạm `/lasso/login` có thể gia hạn thời gian bị chặn. **Đừng thử lại.**
