@@ -101,7 +101,7 @@ P=Link Drive · Q=Note(tay)`
 |---|---|
 | **Cột C có Carrier** hoặc **cột D có tên người** (Eric/Kap/Xuan…) | **BỎ QUA** — đang có người làm tay, làm nữa = **lệnh pickup trùng** |
 | Bang **AK / HI** | **DỪNG, HỎI NGƯỜI DÙNG** — `05_TraCuu/carrier.csv` chỉ có 48 bang lục địa + NCA/SCA |
-| Ship Via = Ground | Vẫn lưu Drive; **người dùng tự dựng BOL** |
+| Ship Via = Ground | 🔄 **ĐỔI 06–08/08** — có quy trình riêng (UPS label → Lecangs → cột N), xem `7_QuyTrinh_Ground_UPS.md`. `xu-ly-don.mjs` vẫn bỏ qua Ground: nhánh này chạy riêng, **chưa nối vào** |
 
 Dấu hiệu người làm tay: `x` **viết thường** ở cột J/M (script luôn ghi `X` HOA) và **cột P trống**.
 

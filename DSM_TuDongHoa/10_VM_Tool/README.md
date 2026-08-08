@@ -242,7 +242,7 @@ Gọi qua `chay-dinh-ky.sh`, **đừng gọi `run.mjs` thẳng từ cron** (thi�
 thiếu dịch mã thoát):
 
 ```cron
-*/5    7-19 * * 1-5  chay-dinh-ky.sh     # doi tu 30' -> 5' ngay 06/08
+*/5    7-19 * * *    chay-dinh-ky.sh     # 5' tu 06/08; CA 7 NGAY tu 08/08
 2-59/5 *    * * *    giu-session.sh
 ```
 
