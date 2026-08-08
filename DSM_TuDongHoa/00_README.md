@@ -1,6 +1,13 @@
 # DSM — Tự động hoá hoàn thiện đơn dropship (CommerceHub / Home Depot)
 
-Cập nhật **04/08/2026**. Mục lục toàn bộ tài liệu & script. Đọc theo thứ tự số.
+Cập nhật **08/08/2026**. Mục lục toàn bộ tài liệu & script. Đọc theo thứ tự số.
+
+> 🚩 **PHIÊN MỚI ĐỌC THEO THỨ TỰ NÀY:**
+> 1. `CLAUDE.md` — quy tắc bắt buộc, hằng số, bản đồ file
+> 2. `00_BanGiao_PhienMoi_08082026.md` — **trạng thái mới nhất**, việc còn treo, bẫy đã gặp
+> 3. File này để tra mục lục
+>
+> ⚠️ Vài mục trong file này viết từ 04/08, đọc kèm bản bàn giao để biết chỗ nào đã đổi.
 
 ---
 
@@ -20,7 +27,7 @@ Cập nhật **04/08/2026**. Mục lục toàn bộ tài liệu & script. Đọc
 
 | Điều kiện | Xử lý |
 |---|---|
-| Ship Via = **Ground** | **BỎ QUA** — người dùng tự làm |
+| Ship Via = **Ground** | 🔄 **ĐỔI 06–08/08** — nay có quy trình riêng: UPS tạo shipping label → Lecangs → Tracking Number vào cột N. Xem `01_HuongDan_VanHanh/7_QuyTrinh_Ground_UPS.md`. `xu-ly-don.mjs` vẫn bỏ qua Ground (nhánh này chạy riêng, chưa nối vào) |
 | **Cột C (Carrier) đã có** hoặc **cột D (PIC) có tên người** (Eric/Kap/…) | **BỎ QUA** — đang có người làm tay, làm nữa là **lệnh pickup trùng** |
 | Bang **AK / HI** | **DỪNG, HỎI NGƯỜI DÙNG** — `carrier.csv` chỉ có 48 bang lục địa + NCA/SCA |
 
@@ -163,5 +170,8 @@ Mail báo kho bỏ từ 01/08; trigger `processOrders` **đã xoá 04/08 — kh�
 ## Trạng thái hiện tại
 - **Không còn mail báo kho.** Kho tự vào Drive xem; cột M người dùng ghi tay.
 - Trigger đang chạy: `fillPro` (**info@**, 15′) · `checkMarioPro` (**b2b@**, 15′) · `checkRithumOrders` (**rithumgetorder@**, 10′). Cả ba tài khoản cần quyền Edit sheet.
-- Nhánh **Ground**: người dùng tự xử lý.
+- Nhánh **Ground**: 🔄 **đang tự động hoá, gần xong.** `ground-tra.mjs` · `lecangs.mjs` ·
+  `ups-form.mjs` đều chạy thật. **Còn thiếu đúng một chặng**: `Pay and Get Label(s)` →
+  PDF label + Tracking Number. Chi tiết: `00_BanGiao_PhienMoi_08082026.md`.
+  ⛔ Không đăng nhập UPS được từ VM (Akamai chặn) — phải nạp cookie từ máy người dùng.
 - **Sheet có nhiều người sửa cùng lúc** — số đơn/ngày thay đổi giữa các lần đọc, nên ngày pickup do trần quyết định phụ thuộc thời điểm chạy. Luôn lấy ngày từ `mk.pickupSchedule` trả về, đừng tự tính lại.
