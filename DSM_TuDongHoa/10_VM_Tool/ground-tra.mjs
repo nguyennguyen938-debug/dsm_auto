@@ -148,7 +148,25 @@ export function ngayPickupGround(bayGio = new Date()) {
  * store phải ghi cả dòng C/O vào Company Name).
  */
 export function diaChiGiao(shipTo) {
-  return shipTo.laStore
-    ? { ten: shipTo.ten, d1: shipTo.co, d2: shipTo.diaChi }
-    : { ten: shipTo.ten, d1: shipTo.diaChi, d2: '' };
+  /* 🔴 TRẢ VỀ ĐÚNG TÊN TRƯỜNG MÀ `ups-form.dienNoiNhan()` ĐỌC.
+   * Bản trước trả `{ten, d1, d2}` trong khi `dienNoiNhan()` đọc
+   * `{tenKhach, diaChi1, diaChi2}` — nối hai module vào là gãy ngay với lỗi
+   * "dienNoiNhan: thieu diaChi1". Chưa ai gọi nên chưa nổ, nhưng chú thích bên
+   * `ups-form.mjs` lại bảo "đã tách sẵn" nên rất dễ tin nhầm. Phát hiện 08/08 khi
+   * viết `test-ground-tra.mjs`.
+   *
+   * Luật (tài liệu Phần 1 Mục 1):
+   *   store    : Address Line 1 = phần `C/O ...`, Line 2 = địa chỉ đường phố
+   *   khách lẻ : Address Line 1 = địa chỉ đường phố, Line 2 = trống
+   * ⚠️ Store thì **KHÔNG** điền phần `C/O ...` vào Full Name — chỉ tên cửa hàng. */
+  const { ten, co, laStore, diaChi, city, bang, zip, phone } = shipTo;
+  return {
+    tenKhach:  ten,
+    tenLienHe: ten,                       // tài liệu: giống Full Name
+    diaChi1:   laStore ? co : diaChi,
+    diaChi2:   laStore ? diaChi : '',
+    city, zip,
+    state:     bang,                      // slip gọi `bang`, form UPS gọi `state`
+    dienThoai: phone || ''
+  };
 }

@@ -223,7 +223,9 @@ DSM sinh file **có độ trễ** — dùng `doiDuSlip()` để đợi đủ sli
 | `05_TraCuu/{carrier,class,pallet}.csv` | Bảng tra carrier · freight class · pallet/weight |
 | `07_Plan_AutoPackingSlip.md` | Thiết kế + toàn bộ khảo sát endpoint DSM |
 | `08_Tool_TaiPackingSlip.js` | Tool chạy **trong tab** Chrome (3 hàm) |
-| `10_VM_Tool/` | **Bản Node + Playwright chạy tự động trên VM** |
+| `10_VM_Tool/` | **Bản Node + Playwright chạy tự động trên VM.** Có `README.md` riêng — **đọc nó trước khi sửa code ở đây** |
+| `10_VM_Tool/test-ground-tra.mjs` | Bộ test nhánh Ground: `node 10_VM_Tool/test-ground-tra.mjs` (25/25) |
+| `00_BanGiao_PhienMoi_08082026.md` | **Trạng thái mới nhất** — đọc ngay sau file này |
 | `11_TaiVe/` | **Chỗ tải file về trên VM** (thay `C:\Users\Lenovo\Downloads`). Đã `.gitignore` |
 | `06_File_Cu_KHONG_DUNG/` | ⚠️ **ĐỪNG dán lên Apps Script** — trùng tên hàm sẽ đè code mới |
 
@@ -245,8 +247,10 @@ Cập nhật **08/08/2026**.
 
 ### 🔐 Phiên đăng nhập — profile cố định `11_TaiVe/.profile-ground`
 
-Kiểm 07/08 (đóng hẳn trình duyệt rồi mở lại): **Lecangs và UPS đều CÒN PHIÊN**.
-Dùng `chromium.launchPersistentContext('11_TaiVe/.profile-ground', {...})`.
+Profile giữ phiên **Lecangs** (bền, sống qua khởi động lại). Phiên **UPS** thì không —
+xem khối đỏ bên dưới, phải nạp cookie mỗi lần.
+⚠️ Khi soi/sửa web, dùng `10_VM_Tool/cdp.mjs` gắn vào Chrome đang mở, **đừng** `launchPersistentContext`
+song song — profile bị khoá, Chrome thứ hai sẽ báo *"Opening in existing browser session"*.
 
 | Site | Đăng nhập | Ghi chú |
 |---|---|---|
@@ -254,48 +258,60 @@ Dùng `chromium.launchPersistentContext('11_TaiVe/.profile-ground', {...})`.
 | UPS | **`info@allforwood.com`** (chốt 07/08) | 🔴 **KHÔNG đăng nhập được từ VM** — Akamai chặn `/lasso/login` với mọi trình duyệt. Cách làm: **nạp cookie từ máy người dùng** bằng `nap-cookie-ups.mjs`, phiên sống **~20–35 phút**. Xem `7_QuyTrinh_Ground_UPS.md`. `layMaUps()` vẫn dùng được khi người dùng tự đăng nhập |
 | AACT | `info@allforwood.com` | Không MFA, `creds.json` đăng nhập được bình thường |
 
-🔴 **UPS BẮT BUỘC chạy headful trên Xvfb** — headless bị Akamai chặn (`ERR_HTTP2_PROTOCOL_ERROR`),
-đổi `userAgent` không cứu được. Lecangs và AACT thì headless vẫn chạy.
+🔴 **UPS BẮT BUỘC headful trên Xvfb** (`:99`) — headless bị chặn. Lecangs/AACT thì headless vẫn chạy.
 
-🔴 **ĐĂNG NHẬP UPS TỰ ĐỘNG: KHÔNG LÀM ĐƯỢC — kết luận sau một buổi đo, 07/08/2026.**
+🔴 **ĐĂNG NHẬP UPS: KHÔNG LÀM ĐƯỢC TỪ VM — chốt 08/08/2026, ĐỪNG THỬ LẠI.**
 
-Trang đăng nhập **không ở `www.ups.com`**: `/lasso/login` chỉ 302 sang
-`id.ups.com/authorize` → `id.ups.com/u/login/identifier` (**Auth0 Universal Login**, 2 bước).
+Trang đăng nhập không ở `www.ups.com`: `/lasso/login` → `id.ups.com/u/login/identifier`
+(**Auth0**, 2 bước, có **Cloudflare Turnstile**).
 
-Có **hai lớp chống bot**, phải qua cả hai:
+`www.ups.com/lasso/login` bị **Akamai** trả `Access Denied` với **mọi trình duyệt trên VM**,
+kéo dài **hơn 12 tiếng**. Đã loại trừ, mỗi cái một phép đo:
 
-| Lớp | Triệu chứng | Đã thử |
-|---|---|---|
-| **Akamai** trên `www.ups.com` | `Access Denied` ở `/lasso/login` | Loại trừ được IP (curl kèm đủ header thì 302 bình thường), loại trừ headless, loại trừ `navigator.webdriver` (chrome trần + CDP vẫn bị). Thủ phạm là **cookie `_abck` bị đánh dấu bot** — xoá nhóm cookie Akamai thì vào được **một lúc**, dùng vài lần lại bị đánh dấu lại |
-| **Cloudflare Turnstile** trên `id.ups.com` | `input[name=captcha]` **rỗng**; bấm Continue thì trang **im lặng đứng yên, KHÔNG báo lỗi** | Turnstile có tải và chạy (`window.turnstile` tồn tại) nhưng không sinh token. Một nguyên nhân phụ: `brunhild.challenges.cloudflare.com` **chỉ có bản ghi AAAA** mà VM không có IPv6; ép về IPv4 bằng `--host-resolver-rules` thì hết lỗi mạng nhưng **token vẫn rỗng** |
-
-✅ **GIẢI ĐƯỢC 07/08/2026 — hai lỗi MÔI TRƯỜNG, không phải chống bot:**
-
-| Lỗi | Cách vá |
+| Nghi ngờ | Kết quả |
 |---|---|
-| `brunhild.challenges.cloudflare.com` **chỉ có bản ghi AAAA** mà VM không có IPv6 → `ERR_ADDRESS_UNREACHABLE` | `--host-resolver-rules="MAP *.challenges.cloudflare.com <IPv4>"` |
-| 🔴 **Chrome 151 dưới Xvfb KHÔNG CÓ WEBGL** — từ bản 130 SwiftShader phải bật bằng cờ riêng. Trình duyệt thật gần như luôn có WebGL, thiếu nó là dấu hiệu bot rất mạnh | `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` |
+| Chặn IP | ❌ `curl` cùng IP, không cookie, đủ header → `302` bình thường |
+| Cookie `_abck` bẩn | ❌ profile trắng hoàn toàn cũng bị |
+| Cổng gỡ lỗi CDP | ❌ bỏ đi vẫn bị |
+| Dấu vết engine Chrome | ❌ **Firefox 153** cũng bị |
+| Bản "Chrome for Testing" | ❌ **Chromium 151 bản Debian thật** cũng bị |
+| Thiếu WebGL | ❌ đã bật SwiftShader, vẫn bị |
 
-Cả hai đã nằm trong `vnc.sh trinhduyet`. Sau khi vá, **người dùng tích được ô "Verify you are human"**.
+Khác biệt duy nhất còn lại: **trình duyệt chạy JavaScript** nên bị script cảm biến Akamai
+chấm điểm; môi trường VM lộ `SwiftShader`, 2 nhân CPU, 4 GB RAM, không thiết bị âm thanh.
 
-⚠️ Đã tốn nhiều thời gian vì kết luận sai hai lần: đổ cho **IP datacenter** (sai) và cho rằng
-**có lối đăng nhập khác không Turnstile** (không có — đã thử 6 đường, kể cả trang chủ → nút
-Log In góc phải; tất cả đều đổ về `id.ups.com/u/login/identifier`).
-Bài học: **đo môi trường trình duyệt trước khi đổ cho mạng hay IP.**
+⛔ **Người dùng ĐÃ hỏi "vá dấu vết trình duyệt được không" — ĐÃ TỪ CHỐI.** Đó là né cơ chế
+chống bot. Giữ nguyên quyết định, kể cả khi được hỏi lại.
+⛔ **Mỗi lần chạm `/lasso/login` có thể gia hạn thời gian bị chặn. Đừng thử lại.**
 
-⛔ Vẫn không viết gì để **né** Turnstile — chỉ sửa cho môi trường trình duyệt bình thường trở lại.
+### ✅ CÁCH LÀM CHÍNH THỨC: nạp cookie từ máy người dùng
 
-**Cách làm đang dùng:** đăng nhập tay qua VNC (người thật giải Turnstile) → phiên nằm trong
-`.profile-ground` → mọi việc còn lại tự động. `10_VM_Tool/ups-dangnhap.mjs` vẫn giữ, nó dừng
-sớm và báo đúng lớp nào chặn, kèm ảnh + JSON trong `11_TaiVe/logs/ups-b*.{png,json}`.
+```bash
+node 10_VM_Tool/nap-cookie-ups.mjs <file-cookie>
+```
+Người dùng: dashboard UPS → F12 → Network → tải lại → dòng đầu → **Copy as cURL** → dán vào file.
 
-→ `layMaUps()` **vẫn dùng được và vẫn cần** — cho lúc UPS hỏi lại MFA bên trong profile ấm.
-→ 🔴 **Mất `.profile-ground` là phải đăng nhập tay.** Đã sao lưu:
-   `11_TaiVe/.profile-ground-backup-<ngày>.tar.gz` (45 MB). **Nên sao lưu lại định kỳ.**
+- **Phiên UPS KHÔNG ràng buộc theo IP** — cookie tạo ở IP nhà dùng tốt trên IP Google Cloud.
+- Có phiên rồi thì **không bao giờ chạm `/lasso/login`**, nên chặn kia thành vô hại.
+- ⏱️ **Phiên chỉ sống ~20–35 phút** (đo 3 lần: 27 · 34 · 21), và **luôn chết trong lúc đang
+  thao tác** → không phải hết hạn do để không, **ping giữ nhịp không cứu được**.
+  → Nạp xong **chạy ngay**, đừng khảo sát trước.
 
-⚠️ Còn một khác biệt chưa giải thích được: `moContext()` (Playwright tự khởi chạy) bị Akamai
-chặn, còn chrome trần + `connectOverCDP` thì có lần qua được — nên có thêm `moContextCDP()`.
-Nhưng sau nhiều lần thử, profile bị đánh dấu thì **cả hai đường đều chặn**.
+Hai cờ dưới đây **bắt buộc** khi mở Chrome, thiếu là Turnstile không tick được kể cả người thật:
+```
+--host-resolver-rules="MAP *.challenges.cloudflare.com <IPv4>"   # host này chỉ có AAAA, VM không có IPv6
+--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader
+```
+
+🎯 **Hướng đã chốt để bỏ hẳn bước cookie: UPS Shipping API** (`developer.ups.com`) — xem
+`00_BanGiao_PhienMoi_08082026.md` mục 4.
+
+`10_VM_Tool/ups-dangnhap.mjs` giữ lại làm tư liệu, **không dùng được**.
+
+⚠️ Đã kết luận sai ba lần trước khi ra được cái trên: đổ cho **IP datacenter**, cho rằng **có
+lối đăng nhập khác không Turnstile**, và đổ lỗi `250002` cho **tài khoản `12C8D2`** (thật ra là
+phiên hết hạn — `ValidateAccounts` sau đó trả `isValid:true`).
+Bài học: **đo trước, kết luận sau.**
 
 ### ✅ Đang chạy tự động, không cần ai
 
@@ -392,10 +408,10 @@ Repo clone tại `/home/Lenovo/dsm_auto`, thư mục làm việc `/home/Lenovo/d
 | Việc | Thực tế trên VM |
 |---|---|
 | Chỗ tải file | `11_TaiVe/` — xem `11_TaiVe/README.md`. **Không có `~/Downloads`** |
-| Trình duyệt | Chỉ **headless** (`DISPLAY` rỗng). Chromium có sẵn; **Google Chrome KHÔNG có** → mọi lệnh Playwright phải `--browser chromium` |
+| Trình duyệt | Có **màn hình ảo `:99`** (Xvfb) — dựng bằng `10_VM_Tool/vnc.sh bat`. UPS **bắt buộc headful**; Lecangs/AACT headless vẫn chạy. Có cả `chromium` hệ thống (`/usr/bin/chromium`) lẫn bản Playwright, và **Firefox 153** |
 | MCP dùng cho DSM | **`playwright-dsm`** (khai trong `~/.claude.json`) |
 | ⚠️ MCP `playwright` | Trỏ `/opt/wayfair/downloads` — **dự án khác đang chạy thật, đừng đụng, đừng dùng cho DSM** |
-| `login.mjs` | Cần màn hình → **không chạy được ở đây**. Đăng nhập ở máy có màn hình rồi copy `storageState.json` lên VM |
+| `login.mjs` | ⚠️ **Cũ, cho DSM.** Nhánh Ground KHÔNG dùng — xem `nap-cookie-ups.mjs` |
 
 Hai mẹo kỹ thuật chỉ đúng trong Cowork, **bỏ qua khi ở Claude Code**:
 `javascript_tool` trả `{}` với hàm async (phải ghi vào `window.__x` rồi đọc lệnh sau), và kết quả

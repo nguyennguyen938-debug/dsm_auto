@@ -181,7 +181,7 @@ export async function vaoFormCu(page, { batBuocMoi = false } = {}) {
  *        Luật `diaChi1`/`diaChi2` KHÁC nhau giữa store và khách lẻ — xem tài liệu:
  *          store    : diaChi1 = phần "C/O ...", diaChi2 = địa chỉ đường phố
  *          khách lẻ : diaChi1 = địa chỉ đường phố, diaChi2 = trống
- *        `ground-tra.diaChiGiao()` đã tách sẵn theo luật này.
+ *        ✅ `ground-tra.diaChiGiao(slip.shipTo)` trả về ĐÚNG object này — truyền thẳng vào.
  *
  * ⚠️ City LUÔN ghi đè bằng City trong packing slip. Điền ZIP xong UPS tự điền City,
  *    nhưng tài liệu chốt: cứ ghi đè, không cần kiểm đúng sai.

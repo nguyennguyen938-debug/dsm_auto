@@ -37,7 +37,7 @@ Mất 2 phút 40 giây, không lỗi.
 
 | Phần | File | Trạng thái |
 |---|---|---|
-| Tra kho theo bang, dims, ngày pickup | `ground-tra.mjs` | ✅ 22/22 test |
+| Tra kho theo bang, dims, ngày pickup | `ground-tra.mjs` | ✅ **25/25 test** — `node 10_VM_Tool/test-ground-tra.mjs` |
 | Tra tồn kho Lecangs + chọn kho | `lecangs.mjs` | ✅ chạy thật |
 | Tạo đơn parcel Lecangs | `lecangs.mjs` | ✅ điền 16/16 ô — **chưa Save & Submit lần nào** |
 | UPS: chọn kho → Mục 1–5 → Review | `ups-form.mjs` | ✅ chạy thật, `chayFormUps()` |

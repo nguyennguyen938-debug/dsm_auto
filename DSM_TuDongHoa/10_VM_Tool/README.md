@@ -312,7 +312,7 @@ Quy trình: `01_HuongDan_VanHanh/7_QuyTrinh_Ground_UPS.md`.
 
 | File | Làm gì | Trạng thái |
 |---|---|---|
-| `ground-tra.mjs` | Thuần dữ liệu: kho theo bang, dims theo SKU, ngày pickup Ground, tách địa chỉ store/khách lẻ | ✅ 22/22 test |
+| `ground-tra.mjs` | Thuần dữ liệu: kho theo bang, dims theo SKU, ngày pickup Ground, tách địa chỉ store/khách lẻ | ✅ **25/25 test** — `node 10_VM_Tool/test-ground-tra.mjs` |
 | `lecangs.mjs` | Tra tồn kho, chọn kho gần nhất còn hàng, điền form tạo đơn parcel | ✅ chạy thật · ⛔ **`Save & Submit` chưa chạy lần nào** |
 | `ups-form.mjs` | Chọn kho gửi → Mục 1–5 → Review trên form UPS cũ | ✅ chạy thật · ❌ **chưa có `Pay and Get Label(s)`** |
 | `nap-cookie-ups.mjs` | Nạp phiên UPS từ máy người dùng vào profile | ✅ |
