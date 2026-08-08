@@ -1,7 +1,10 @@
 # CLAUDE.md — Dự án DSM AllForWood
 
 Claude Code đọc file này tự động. Đây là bản tóm tắt **đã kiểm chứng thực tế**; chi tiết trong các file
-được dẫn ở dưới. Cập nhật **06/08/2026**.
+được dẫn ở dưới. Cập nhật **08/08/2026**.
+
+> 📌 **Phiên mới đọc thêm `00_BanGiao_PhienMoi_08082026.md`** — trạng thái từng phần, 4 đơn
+> Ground đang chờ, 10 bẫy đã gặp, và những gì **không nên thử lại**.
 
 ---
 
@@ -33,7 +36,10 @@ Claude Code đọc file này tự động. Đây là bản tóm tắt **đã ki�
 7. Đơn **Ground** — 🔄 **ĐỔI 06/08/2026, quyết định cũ đã hết hiệu lực.** Trước ghi "chỉ dừng ở
    mức có slip trên Drive". Nay có quy trình riêng đầy đủ: UPS tạo shipping label → Lecangs →
    ghi Tracking Number vào **cột N**. Xem `01_HuongDan_VanHanh/7_QuyTrinh_Ground_UPS.md`.
-   **Code hiện tại CHƯA làm gì trong số đó** — `xu-ly-don.mjs` vẫn bỏ qua đơn Ground.
+   ✅ **08/08: đã làm được phần lớn** — `ground-tra.mjs` (kho/dims/ngày) · `lecangs.mjs`
+   (tra tồn kho + điền form) · `ups-form.mjs` (chọn kho → Mục 1–5 → Review, chạy thật).
+   ❌ **Còn thiếu đúng một chặng: `Pay and Get Label(s)` → PDF label + Tracking Number.**
+   `xu-ly-don.mjs` vẫn bỏ qua đơn Ground — nhánh Ground chạy riêng, chưa nối vào đó.
    ✅ Đơn Ground **KHÔNG áp trần 20 đơn/ngày** — gọi `makeFolder` kèm `boQuaTran:true`
    (làm 07/08). Web app KHÔNG tự đoán được đơn nào là Ground, **bên gọi phải truyền**.
 8. Trả lời **ngắn gọn, tiếng Việt**.
@@ -235,7 +241,7 @@ mỗi SKU một dòng. Loại gỗ = chữ sau `Unfinished` ở cột B của `p
 
 ## 8. TRẠNG THÁI & VIỆC CÒN TREO
 
-Cập nhật **07/08/2026**.
+Cập nhật **08/08/2026**.
 
 ### 🔐 Phiên đăng nhập — profile cố định `11_TaiVe/.profile-ground`
 
@@ -245,7 +251,7 @@ Dùng `chromium.launchPersistentContext('11_TaiVe/.profile-ground', {...})`.
 | Site | Đăng nhập | Ghi chú |
 |---|---|---|
 | Lecangs | `sue.nguyen@allforwood.com` | Không MFA. `creds.json` có mật khẩu nhưng **đăng nhập bằng nó vẫn báo sai** — hoặc mật khẩu lệch, hoặc tài khoản đã khoá sau 6 lần thử. **ĐỪNG thử thêm.** Phiên trong profile vẫn dùng tốt |
-| UPS | **`info@allforwood.com`** — người dùng chốt 07/08/2026. Bản CLAUDE.md trước ghi `allforwood`, **SAI, đã bỏ** | Có MFA nhưng **mã lấy tự động được** (`layMaUps()`). Đã tích *Remember this device 30 days* → hết hạn khoảng **06/09/2026** |
+| UPS | **`info@allforwood.com`** (chốt 07/08) | 🔴 **KHÔNG đăng nhập được từ VM** — Akamai chặn `/lasso/login` với mọi trình duyệt. Cách làm: **nạp cookie từ máy người dùng** bằng `nap-cookie-ups.mjs`, phiên sống **~20–35 phút**. Xem `7_QuyTrinh_Ground_UPS.md`. `layMaUps()` vẫn dùng được khi người dùng tự đăng nhập |
 | AACT | `info@allforwood.com` | Không MFA, `creds.json` đăng nhập được bình thường |
 
 🔴 **UPS BẮT BUỘC chạy headful trên Xvfb** — headless bị Akamai chặn (`ERR_HTTP2_PROTOCOL_ERROR`),
@@ -298,7 +304,7 @@ Nhưng sau nhiều lần thử, profile bị đánh dấu thì **cả hai đư�
 | `CheckRithum` đơn mới → cột A/B | trigger 10′ |
 | `TraPRO` PRO cho XGSI/BXID → cột N | trigger 15′ |
 | `CheckMail_PRO` PRO cho SEFL/CTII/FXFE/ABFS → cột N | trigger 15′ |
-| `chay-dinh-ky.sh` = `run.mjs` (tải+tách slip) → `xu-ly-don.mjs` (dựng BOL) | cron `*/5 7-19 * * 1-5` |
+| `chay-dinh-ky.sh` = `run.mjs` (tải+tách slip) → `xu-ly-don.mjs` (dựng BOL) | cron `*/5 7-19 * * *` — 🔄 **đổi 08/08: chạy CẢ 7 NGÀY** (trước T2–T6) |
 | `giu-session.sh` chạm nhẹ DSM giữ session | cron `2-59/5 * * * *` (24/7) |
 | `don-dep.sh` dọn `_INBOX` | cron `25 * * * *` |
 
@@ -335,9 +341,9 @@ Cần chốt trước: đọc mail **thay hẳn** Drive, hay **thử mail trư�
 
 ### ⚠️ Chưa kiểm chứng — biết là chưa chắc
 
-- **`xu-ly-don.mjs` chưa xử lý MỘT đơn thật nào.** Cả hai nhánh mới chỉ chạy `--dry`
-  (`11_TaiVe/aact/` rỗng). Lô Misc đầu tiên sẽ là lần chạy thật đầu tiên, **không ai trông**, và
-  với đơn AACT nó **tạo BOL thật**. Trần `DSM_MAX_BOL=10`.
+- ✅ **`xu-ly-don.mjs` ĐÃ xử lý đơn thật (08/08), chạy đúng.** Đơn `25567870`: tải slip →
+  BOL thật trên AACT (`BOL# 4181293`) → PRO `39006147` → folder Drive → điền sheet.
+  Mất 2 phút 40 giây, không lỗi. Trần `DSM_MAX_BOL=10` vẫn còn.
 - **Chỉ cột C được đối chiếu.** `shipTo` · `sku` · `productName` · `qty` rút từ slip nhưng chưa
   lần nào so với sheet — `lookup` không trả về mấy cột đó. Lô đầu nên xem tay cột E–I.
 - **Giữ session có tác dụng không: chưa biết.** Đêm 06/08 là đêm đầu đo liên tục 24/7.
