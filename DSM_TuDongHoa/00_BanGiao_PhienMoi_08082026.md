@@ -9,7 +9,7 @@
 
 | | |
 |---|---|
-| SSH | `ssh -i <khoa> Lenovo@136.111.186.129` — port **22** |
+| SSH | `ssh 136.111.186.129` — port **22**. KHÔNG cần `-i <khoa>`, không cần `Lenovo@` (người dùng chốt 08/08) |
 | Hostname | `wayfair-auto-01` |
 | Thư mục làm việc | `/home/Lenovo/dsm_auto/DSM_TuDongHoa` |
 | VNC | `10_VM_Tool/vnc.sh bat` → tunnel `-L 6080:localhost:6080` → `http://localhost:6080/vnc.html` |

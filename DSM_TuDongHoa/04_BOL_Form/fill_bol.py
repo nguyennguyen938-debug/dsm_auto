@@ -11,8 +11,9 @@ Chạy:  echo '<JSON>' | python3 fill_bol.py [template.html] [out_dir]
 CẬP NHẬT 29/07/2026 — theo yêu cầu người dùng:
   * SPECIAL INSTRUCTIONS: BỎ dòng thứ 4 (dòng kích thước pallet). Chỉ còn 3
     dòng cố định của Home Depot.
-  * # PKGS  = 1 (cả ô dòng dữ liệu lẫn ô GRAND TOTAL) — luôn luôn.
-  * HANDLING UNIT / QTY = 1 (cả 2 ô) — luôn luôn.
+  * # PKGS  = TỔNG QTY (cả ô dòng dữ liệu lẫn ô GRAND TOTAL) — sửa 11/08/2026,
+    trước đây cố định '1'.
+  * HANDLING UNIT / QTY = 1 (cả 2 ô) — luôn luôn, đây là số pallet.
   * Bảng CUSTOMER ORDER INFORMATION và CARRIER INFORMATION: bỏ 2 hàng trống,
     chỉ còn 1 hàng nhưng cao hơn (chứa được nhiều dòng SKU).
   * ADDITIONAL SHIPPER INFO **và** COMMODITY DESCRIPTION dùng cấu trúc:
@@ -149,9 +150,18 @@ def build(tpl, v):
     # 10 ô ctr theo thứ tự:
     #   #PKGS, WEIGHT, GT_#PKGS, GT_WEIGHT,
     #   HU_QTY, PKG_QTY, WEIGHT, GT_HU_QTY, GT_PKG_QTY, GT_WEIGHT
+    #
+    # 🔄 SỬA 11/08/2026 — `# PKGS` = TỔNG QTY, không còn cố định '1'.
+    #    Bản cũ điền '1' theo quy tắc chốt 29/07 ("luôn luôn 1 vì hàng đi trên một
+    #    pallet"). Người dùng chốt lại: `# PKGS` phải bằng tổng Qty Shipped.
+    #    Ví dụ đơn 81900798 (3 tấm): #PKGS 3 · HANDLING UNIT 1 · PACKAGE QTY 3 · 439 lb.
+    #
+    #    `HANDLING UNIT QTY` GIỮ NGUYÊN = 1 — đó là số kiện tài xế bốc (một pallet),
+    #    khác nghĩa với `# PKGS`. Người dùng chỉ yêu cầu đổi `# PKGS`; đổi luôn cả
+    #    handling unit là tự ý mở rộng, và nó làm carrier hiểu thành nhiều kiện rời.
     w, p = str(v['weight']), str(v['pieces'])
     h = fseq(h, '<input class="ctr fill" type="text">',
-             ['1', w, '1', w, '1', p, w, '1', p, w])
+             [p, w, p, w, '1', p, w, '1', p, w])
 
     # 2 textarea: Additional Shipper Info, Commodity Description — cùng nội dung
     body = '<br>'.join(v['item_lines'])

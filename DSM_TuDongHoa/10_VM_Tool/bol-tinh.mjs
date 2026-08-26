@@ -65,27 +65,59 @@ export function skuTuModel(model) {
 
 /**
  * Tính toàn bộ số liệu BOL cho MỘT đơn.
+ *
+ * Nhận **một** dòng hàng `{model, qty}` hoặc **mảng** nhiều dòng hàng.
+ *
+ * 🔄 Nhận mảng từ 12/08/2026, sau khi người dùng chốt **cách A — xếp chung một pallet**:
+ * nhiều mã hàng trên cùng phiếu thì kho chồng lên một pallet, không tách. Hệ quả:
+ *   · WEIGHT  = Σ(cột K × Qty của mọi mã) **+ 55 một lần** — một pallet thì một lần
+ *   · H       = 6 + 2 × **tổng** số tấm (người dùng xác nhận công thức +2″/tấm vẫn đúng
+ *               khi chồng khác loại)
+ *   · L, W    = **lớn nhất** theo từng chiều — pallet phải bao được tấm rộng nhất.
+ *               Lấy L/W của mã đầu tiên là sai: tấm rộng 39″ không nằm vừa pallet rộng 25″.
+ * Truyền một dòng hàng thì kết quả y hệt bản cũ.
+ *
  * Ném lỗi nếu SKU không có trong pallet.csv hoặc PCF không rơi vào khoảng nào —
  * thà dừng còn hơn ghi BOL sai cân, sai class.
  */
-export function tinhBOL({ model, qty }, pallet, bangClass) {
-  const sku = skuTuModel(model);
-  const p = pallet[sku];
-  if (!p) throw new Error(`SKU ${sku} (tu model ${model}) KHONG CO trong pallet.csv`);
-  if (!Number.isFinite(p.K) || p.K <= 0) throw new Error(`SKU ${sku}: cot K khong hop le (${p.K})`);
+export function tinhBOL(hangHoa, pallet, bangClass) {
+  const ds = Array.isArray(hangHoa) ? hangHoa : [hangHoa];
+  if (!ds.length) throw new Error('tinhBOL: khong co dong hang nao');
 
-  const weight = p.K * qty + 55;                    // +55 MỘT lần
-  const H = 6 + 2 * qty;                            // KHÔNG dùng cột E
-  const pcf = (1728 * weight) / (p.L * p.W * H);    // Product Dimension
+  let wsum = 0, tongQty = 0;
+  let L = 0, W = 0, palL = 0, palW = 0, palH = 0;
+  const skus = [], itemDescs = [];
+
+  for (const { model, qty } of ds) {
+    const sku = skuTuModel(model);
+    const p = pallet[sku];
+    if (!p) throw new Error(`SKU ${sku} (tu model ${model}) KHONG CO trong pallet.csv`);
+    if (!Number.isFinite(p.K) || p.K <= 0) throw new Error(`SKU ${sku}: cot K khong hop le (${p.K})`);
+    const q = Number(qty);
+    if (!Number.isFinite(q) || q <= 0) throw new Error(`SKU ${sku}: qty khong hop le (${qty})`);
+
+    wsum += p.K * q;
+    tongQty += q;
+    L = Math.max(L, p.L);  W = Math.max(W, p.W);          // pallet bao ngoài
+    palL = Math.max(palL, p.palL);
+    palW = Math.max(palW, p.palW);
+    palH = Math.max(palH, p.palH);
+    skus.push(sku);
+    itemDescs.push(p.desc);
+  }
+
+  const weight = wsum + 55;                         // +55 MỘT lần cho pallet chung
+  const H = 6 + 2 * tongQty;                        // KHÔNG dùng cột E
+  const pcf = (1728 * weight) / (L * W * H);        // Product Dimension
 
   const d = bangClass.find(r => pcf >= r.min && pcf < r.max);
   if (!d) throw new Error(`PCF ${pcf.toFixed(2)} khong roi vao khoang nao trong class.csv`);
 
   return {
-    sku, weight, qty, pcf: Math.round(pcf * 100) / 100, cls: d.cls,
+    sku: skus[0], skus, weight, qty: tongQty, pcf: Math.round(pcf * 100) / 100, cls: d.cls,
     // Mô tả dùng PALLET Dimension (F/G/H) — khác bộ dùng để tính class
-    moTa: `${qty} pallet - ${p.palL}″ x ${p.palW}″ x ${p.palH}″ - ${weight} lbs`,
-    itemDesc: p.desc
+    moTa: `${tongQty} pallet - ${palL}″ x ${palW}″ x ${palH}″ - ${weight} lbs`,
+    itemDesc: itemDescs[0], itemDescs
   };
 }
 

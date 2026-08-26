@@ -12,7 +12,12 @@ export const R = 'https://dsm.commercehub.com/dsm/';
 export const CFG = {
   WEBAPP: 'https://script.google.com/macros/s/AKfycbzzJCEgWBcO76OcbhJIdiHGlJEgbWxq7FFEGbIwwpQe2gmtOalVOXziJXFyuI1Ckrtn-Q/exec',
   INBOX_FOLDER_ID: '18rFktqm_K_a9-RPW5S0o2fTkmmHITGKO',
-  SHIP_QTY: '1',          // CỜ 0/1 — KHÔNG phải số lượng đơn
+  /* ⛔ ĐÃ BỎ `SHIP_QTY: '1'` — 11/08/2026.
+   * Tài liệu cũ ghi ô "SHIP QUANTITY ON PACKING SLIP" là cờ 0/1 nên luôn điền 1.
+   * SAI. Bằng chứng: PO 81827440 có QUANTITY ORDERED = 2, điền 1 -> slip in ra
+   * "Qty Shipped 1" -> BOL dựng theo slip ghi 1 kiện 183 lb thay vì 2 kiện.
+   * Hàng thiếu mà giấy tờ vẫn khớp nhau, nên không ai phát hiện.
+   * Nay điền ĐÚNG số Quantity Ordered đọc từ chính trang reprint. */
   DELAY_MS: 1500          // nghỉ giữa các PO, tránh bị coi là bot
 };
 
@@ -34,13 +39,56 @@ export function hiddenInputs(html) {
   return out;
 }
 
-/** Tìm name của ô Ship Quantity: order(<orderid>).item(<itemid>).shipped */
-export function shippedFieldName(html) {
+/**
+ * Tìm TẤT CẢ ô Ship Quantity: `order(<orderid>).item(<itemid>).shipped`.
+ *
+ * 🔴 Số nhiều, không phải số ít. Đơn nhiều dòng hàng có nhiều ô `.shipped`; bản cũ
+ *    `shippedFieldName()` trả về cái ĐẦU TIÊN nên các dòng sau không bao giờ được điền
+ *    — cùng họ với bug `pendingFile()` chỉ lấy file chờ đầu tiên (xem README mục
+ *    "Một lô có thể sinh NHIỀU file chờ").
+ */
+export function shippedFieldNames(html) {
+  const out = [];
   for (const t of html.match(/<input\b[^>]*>/gi) || []) {
     const n = attr(t, 'name');
-    if (n && /\.shipped$/.test(n)) return n;
+    if (n && /\.shipped$/.test(n)) out.push(n);
   }
-  return null;
+  return out;
+}
+
+/** Giữ lại cho tương thích — ĐỪNG dùng cho đơn nhiều dòng. */
+export function shippedFieldName(html) {
+  return shippedFieldNames(html)[0] || null;
+}
+
+/**
+ * Đọc cột **QUANTITY ORDERED** trên trang Revised Packing Slip Request.
+ *
+ * 🔴 KHÔNG dùng "QUANTITY REMAINING": đo trên PO 81827440 thì cột đó = 0 trong khi
+ *    QUANTITY ORDERED = 2. Điền theo REMAINING sẽ ra slip rỗng.
+ *
+ * Cách làm: tìm hàng tiêu đề có chữ "QUANTITY ORDERED", ghi lại CHỈ SỐ CỘT, rồi đọc
+ * đúng cột đó ở các hàng dữ liệu. Bám theo chỉ số cột chứ không đếm từ trái sang, vì
+ * bảng còn có UNIT COST / QUANTITY SHIPPED / QUANTITY CANCELLED xen giữa.
+ */
+export function soLuongDat(html) {
+  const rows = html.match(/<tr\b[\s\S]*?<\/tr>/gi) || [];
+  let cot = -1;
+  const ra = [];
+  for (const tr of rows) {
+    const o = (tr.match(/<t[hd]\b[\s\S]*?<\/t[hd]>/gi) || [])
+      .map(td => td.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim());
+    if (!o.length) continue;
+
+    if (cot < 0) {
+      const i = o.findIndex(x => /^quantity\s*ordered$/i.test(x));
+      if (i >= 0) cot = i;
+      continue;                      // hàng tiêu đề, không có dữ liệu
+    }
+    const v = o[cot];
+    if (v !== undefined && /^\d+$/.test(v)) ra.push(parseInt(v, 10));
+  }
+  return ra;
 }
 
 export function formAction(html, formName) {
@@ -141,18 +189,53 @@ export async function submitReprint(req, po) {
 
   const formHtml = (html.match(/<form\b[^>]*name\s*=\s*["']GeneralOrderRealmForm["'][\s\S]*?<\/form>/i) || [])[0];
   if (!formHtml) throw new Error(`submitReprint(${po}): khong thay form GeneralOrderRealmForm`);
-  const qtyName = shippedFieldName(formHtml);
-  if (!qtyName) throw new Error(`submitReprint(${po}): khong thay o .shipped`);
+  const qtyNames = shippedFieldNames(formHtml);
+  if (!qtyNames.length) throw new Error(`submitReprint(${po}): khong thay o .shipped`);
+
+  /* Số lượng đọc từ CHÍNH trang reprint (cột QUANTITY ORDERED), không hard-code.
+   * Đọc từ `html` chứ không phải `formHtml`: bảng Order Summary nằm NGOÀI thẻ <form>. */
+  const dat = soLuongDat(html);
+  if (dat.length !== qtyNames.length) {
+    throw new Error(`submitReprint(${po}): doc duoc ${dat.length} so luong nhung co ` +
+      `${qtyNames.length} o .shipped — KHONG doan, dung lai de nguoi xem. ` +
+      `(Quantity Ordered: ${JSON.stringify(dat)})`);
+  }
+  for (const q of dat) {
+    if (!Number.isInteger(q) || q < 1) {
+      throw new Error(`submitReprint(${po}): Quantity Ordered = ${q} khong hop le`);
+    }
+  }
 
   const body = {};
   for (const h of hiddenInputs(formHtml)) body[h.name] = h.value;
-  body[qtyName] = CFG.SHIP_QTY;
+  qtyNames.forEach((n, i) => { body[n] = String(dat[i]); });
   body['confirmreprintbtn'] = 'Submit';
 
   const post = absUrl(formAction(formHtml, 'GeneralOrderRealmForm')) ||
                (R + 'handleOrderRealmFormSubmission.do');
   const t = await (await req.post(post, { form: body })).text();
-  return { po, orderid, ok: /successfully applied/i.test(t) };
+  const ok = /successfully applied/i.test(t);
+
+  /* 🔴 GHI LẠI SỐ LƯỢNG ĐÃ YÊU CẦU, ngay sau khi submit.
+   * `xu-ly-don.mjs` tính BOL từ qty ĐỌC TRÊN SLIP. Nếu slip in sai (đúng lỗi
+   * 11/08/2026: tool điền 1 cho đơn đặt 2) thì BOL sai cân, sai class, và KHÔNG CÓ
+   * GÌ BÁO — giấy tờ vẫn khớp nhau, chỉ hàng là thiếu.
+   * File này là bản ghi độc lập lấy thẳng từ DSM, để bước dựng BOL đối chiếu chéo.
+   * Ghi kể cả khi submit lỗi: biết đã yêu cầu bao nhiêu vẫn hơn không biết gì. */
+  try {
+    const fsp = await import('node:fs/promises');
+    const pathp = await import('node:path');
+    const thuMuc = process.env.DSM_QTY ||
+      pathp.join(pathp.dirname(new URL(import.meta.url).pathname), '..', '11_TaiVe', 'qty');
+    await fsp.mkdir(thuMuc, { recursive: true });
+    await fsp.writeFile(pathp.join(thuMuc, `${po}.json`),
+      JSON.stringify({ po, orderid, qtyDat: dat, tong: dat.reduce((a, b) => a + b, 0),
+                       luc: new Date().toISOString(), ok }, null, 1));
+  } catch (e) {
+    console.error(`⚠️ ${po}: khong ghi duoc file qty — ${e.message}`);
+  }
+
+  return { po, orderid, qty: dat, ok };
 }
 
 /* --- BƯỚC 5: file chờ + PO bên trong ----------------------------------- */

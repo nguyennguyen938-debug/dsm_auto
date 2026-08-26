@@ -62,14 +62,43 @@ var SHEET_CFG = {
   COL_PRO: 14,       // N  PRO # / SHIPPING #
   COL_PICKUPNUM: 15, // O  PICKUP #
   COL_LINKDRIVE: 16, // P  Link Drive
-  COL_NOTE: 17       // Q  (người dùng tự điền)
+  COL_NOTE: 17,      // Q  (người dùng tự điền)
+  /* T (20) — "B2B and B2C". Đơn có SKU hỗn hợp (một phần đi luồng B2B, một phần B2C)
+   * thì KHÔNG xử lý, chỉ đánh X vào đây; `CopyB2B_B2C.gs` thấy X là copy sang cả hai
+   * sheet. R và S bỏ trống — T là cột thứ 20, không phải 18. */
+  COL_B2B_B2C: 20
 };
+
+/**
+ * Chọn sheet để đọc/ghi. Mặc định `Order List`.
+ *
+ * `sheetGid` (số) — tra theo **gid**, cách duy nhất ổn định: tên tab người dùng đổi lúc
+ * nào không biết, mà đổi tên thì mọi lời gọi im lặng rơi về sheet mặc định.
+ * `sheetName` — giữ lại cho tương thích, dùng khi biết chắc tên.
+ *
+ * Kèm `headerRows` ở nơi gọi: `Order List` có header ở hàng 6, còn B2B/B2C hàng 1.
+ */
+function _shTheoGid_(body) {
+  var ss = SpreadsheetApp.openById(body.sheetId || SHEET_CFG.SHEET_ID);
+  if (body.sheetGid != null && String(body.sheetGid) !== '') {
+    var gid = Number(body.sheetGid);
+    var ds = ss.getSheets();
+    for (var i = 0; i < ds.length; i++) if (ds[i].getSheetId() === gid) return ds[i];
+    throw new Error('Khong tim thay sheet co gid ' + gid + '. Cac sheet: ' +
+      ds.map(function (s) { return s.getName() + '(' + s.getSheetId() + ')'; }).join(', '));
+  }
+  var ten = body.sheetName || SHEET_CFG.SHEET_NAME;
+  var sh = ss.getSheetByName(ten);
+  if (!sh) throw new Error('Không thấy sheet "' + ten + '"');
+  return sh;
+}
 
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
     if (body.action === 'makeFolder') return _makeFolder(body);
     if (body.action === 'fillRow')    return _fillRow(body);
+    if (body.action === 'danhDauB2B_B2C') return _danhDauB2B_B2C(body);
     if (body.action === 'lookup')     return _lookup(body);
     if (body.action === 'needSlip')   return _needSlip(body);
     if (body.action === 'donDepManifest') return _donDepManifest(body);
@@ -163,23 +192,64 @@ function _makeFolder(body) {
   });
 }
 
+/**
+ * D2) Đánh dấu đơn "vừa B2B vừa B2C" — ghi `X` vào cột T, KHÔNG chạm cột nào khác.
+ *
+ * Dùng cho packing slip có SKU hỗn hợp: một phần hàng đi luồng B2B, phần kia B2C
+ * (ví dụ một SKU lấy ở kho Calhoun, SKU kia ở kho Lecangs). Những đơn này **chưa xử lý**
+ * — không BOL, không folder Drive, không carrier. `CopyB2B_B2C.gs` thấy X thì copy sang
+ * cả hai sheet, chỉ chép A, B, T.
+ *
+ * Idempotent: gọi lại chỉ ghi đè đúng chữ `X` đó.
+ * PO chưa có trên sheet thì thêm hàng mới (PO ghi dạng TEXT) — thà có hàng thiếu ngày
+ * còn hơn đơn biến mất không ai biết.
+ */
+function _danhDauB2B_B2C(body) {
+  var po = String(body.po || '').trim();
+  if (!po) throw new Error('danhDauB2B_B2C: thiếu po');
+
+  var sh = _shTheoGid_(body);
+  var headerRows = body.headerRows != null ? Number(body.headerRows) : SHEET_CFG.HEADER_ROWS;
+
+  var lock = LockService.getScriptLock(); lock.tryLock(15000);
+  try {
+    var start = headerRows + 1;
+    var last = sh.getLastRow();
+    var found = 0;
+    if (last >= start) {
+      var col = sh.getRange(start, SHEET_CFG.COL_PO, last - headerRows, 1).getValues();
+      var key = _poKey(po);
+      for (var i = 0; i < col.length; i++) {
+        var cell = String(col[i][0]).trim();
+        if (cell === po || _poKey(cell) === key) { found = start + i; break; }
+      }
+    }
+    var row = found || (last < start ? start : last + 1);
+    if (!found && !_ghiText_(sh.getRange(row, SHEET_CFG.COL_PO), po)) {
+      throw new Error('Khong ghi duoc PO ' + po + ' dang TEXT — dung lai, dung ghi tiep');
+    }
+    sh.getRange(row, SHEET_CFG.COL_B2B_B2C).setValue('X');
+    SpreadsheetApp.flush();
+    return _json({ ok: true, row: row, po: po, themMoi: !found });
+  } finally { lock.releaseLock(); }
+}
+
 // D) Tìm PO ở cột B rồi điền; không thấy -> thêm hàng mới
 function _fillRow(body) {
   var po = String(body.po || '').trim();
   var carrier = String(body.carrier || '').trim().toUpperCase();
   if (!po) throw new Error('fillRow: thiếu po');
 
-  var ss = SpreadsheetApp.openById(body.sheetId || SHEET_CFG.SHEET_ID);
-  var sh = ss.getSheetByName(body.sheetName || SHEET_CFG.SHEET_NAME);
-  if (!sh) throw new Error('Không thấy sheet "' + (body.sheetName || SHEET_CFG.SHEET_NAME) + '"');
+  var sh = _shTheoGid_(body);
+  var headerRows = body.headerRows != null ? Number(body.headerRows) : SHEET_CFG.HEADER_ROWS;
 
   var lock = LockService.getScriptLock(); lock.tryLock(15000);
   try {
-    var start = SHEET_CFG.HEADER_ROWS + 1;
+    var start = headerRows + 1;
     var last = sh.getLastRow();
     var found = 0;
     if (last >= start) {
-      var col = sh.getRange(start, SHEET_CFG.COL_PO, last - SHEET_CFG.HEADER_ROWS, 1).getValues();
+      var col = sh.getRange(start, SHEET_CFG.COL_PO, last - headerRows, 1).getValues();
       var key = _poKey(po);
       for (var i = 0; i < col.length; i++) {
         var cell = String(col[i][0]).trim();
@@ -203,7 +273,13 @@ function _fillRow(body) {
     set(SHEET_CFG.COL_SKU, body.sku);                                        // G (nguyên Model Number)
     set(SHEET_CFG.COL_PRODUCT, body.productName);                            // H (Item Description)
     set(SHEET_CFG.COL_QTY, body.qty);                                        // I
-    sh.getRange(row, SHEET_CFG.COL_BOLLABEL).setValue('X');                  // J mặc định X
+    /* J — dấu "đã có BOL/ShippingLabel".
+     * 🔴 `chuaCoBOL: true` -> KHÔNG đánh X. Thêm 09/08/2026 cho nhóm đơn **UPS (Ground)
+     *    và CTII**: người dùng chốt hai loại này CHƯA tạo BOL/label nhưng VẪN điền sheet.
+     *    Đánh X trong khi chưa có file nghĩa là báo với người đọc sheet rằng giấy tờ đã
+     *    xong — họ sẽ không đi làm nữa, và đơn nằm im. Sai kiểu này im lặng hơn hẳn
+     *    một ô trống. */
+    if (!body.chuaCoBOL) sh.getRange(row, SHEET_CFG.COL_BOLLABEL).setValue('X');   // J
 
     // K — áp TRẦN 15 ĐƠN/NGÀY: dời sang ngày làm việc kế nếu ngày mong muốn đã đầy
     var pk = null, kTextOk = null;
@@ -317,16 +393,20 @@ function _resolvePickupDate(sh, wanted, selfRow) {
  *  Kèm luôn tải pickup từng ngày để khỏi phải đọc sheet lần nữa.
  * ============================================================ */
 function _lookup(body) {
-  var sh = SpreadsheetApp.openById(SHEET_CFG.SHEET_ID).getSheetByName(SHEET_CFG.SHEET_NAME);
-  if (!sh) throw new Error('Không thấy sheet "' + SHEET_CFG.SHEET_NAME + '"');
+  /* `sheetGid` + `headerRows`: cho phép tra ngay trên sheet **B2B / B2C** thay vì
+   * `Order List`. Thêm 11/08/2026 khi người dùng chốt tách luồng — tool của mỗi sheet
+   * đọc và ghi ngay trên sheet đó, `Order List` chỉ còn là danh sách đầu vào.
+   * Tra theo **gid** chứ không theo tên: tên tab đổi lúc nào không biết. */
+  var sh = _shTheoGid_(body);
+  var headerRows = body.headerRows != null ? Number(body.headerRows) : SHEET_CFG.HEADER_ROWS;
   var want = {};
   (body.pos || []).forEach(function (p) { want[_poKey(String(p).trim())] = String(p).trim(); });
 
-  var start = SHEET_CFG.HEADER_ROWS + 1;
+  var start = headerRows + 1;
   var last = sh.getLastRow();
   var res = {}, load = {};
   if (last >= start) {
-    var vals = sh.getRange(start, 1, last - SHEET_CFG.HEADER_ROWS, SHEET_CFG.COL_NOTE).getValues();
+    var vals = sh.getRange(start, 1, last - headerRows, SHEET_CFG.COL_B2B_B2C).getValues();
     for (var i = 0; i < vals.length; i++) {
       var row = vals[i];
       var k = _dayKey(row[SHEET_CFG.COL_PICKUP - 1]);
@@ -342,7 +422,9 @@ function _lookup(body) {
           pickup:  String(row[SHEET_CFG.COL_PICKUP - 1] || '').trim(),    // K
           whNotif: String(row[SHEET_CFG.COL_WHNOTIF - 1] || '').trim(),   // M
           pro:     String(row[SHEET_CFG.COL_PRO - 1] || '').trim(),       // N
-          link:    String(row[SHEET_CFG.COL_LINKDRIVE - 1] || '').trim()  // P
+          link:    String(row[SHEET_CFG.COL_LINKDRIVE - 1] || '').trim(), // P
+          // T — "B2B and B2C". Tool đọc cột này để biết đơn hỗn hợp, xem CopyB2B_B2C.gs
+          b2bB2c:  String(row[SHEET_CFG.COL_B2B_B2C - 1] || '').trim()
         };
       }
     }
@@ -673,7 +755,18 @@ function doGet(e) {
     if (p.action === 'donDepManifest') return _donDepManifest(p);
     if (p.action === 'maUps')      return _maUps(p);      // MaDangNhap_UPS.gs
     if (p.action === 'lookup' && p.pos) {
-      return _lookup({ pos: String(p.pos).split(',').map(function (x) { return x.trim(); }) });
+      /* 🔴 PHẢI chuyển tiếp `sheetGid`/`headerRows`/`sheetId`.
+       *
+       * Bản trước chỉ truyền `pos`, nên mọi lời gọi kèm `sheetGid` **âm thầm rơi về
+       * `Order List`** — trả dữ liệu trông hoàn toàn hợp lệ, chỉ là của sai sheet.
+       * Tool đọc thấy "đơn đã có link Drive" (của Order List) rồi kết luận phần B2B đã
+       * xử lý xong, trong khi sheet B2B còn trống trơn. Không có lỗi nào bật lên.
+       * Gặp thật 12/08/2026 ngay lần kiểm đầu sau khi deploy. */
+      return _lookup({
+        pos: String(p.pos).split(',').map(function (x) { return x.trim(); }),
+        sheetGid: p.sheetGid, sheetName: p.sheetName, sheetId: p.sheetId,
+        headerRows: p.headerRows
+      });
     }
     return _json({ ok: true, msg: 'Receiver alive' });
   } catch (err) {

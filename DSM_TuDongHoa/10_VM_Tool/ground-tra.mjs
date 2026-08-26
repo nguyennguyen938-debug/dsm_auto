@@ -11,12 +11,91 @@ import path from 'node:path';
 const GOC = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 
 /**
- * 4 SKU LUÔN đi kho Calhoun và KHÔNG qua Lecangs.
- * So khớp theo phần SỐ của Model Number (`816390-B` và `816390` đều tính).
+ * 4 chuỗi LUÔN đi kho Calhoun và KHÔNG qua Lecangs.
+ * So khớp **TUYỆT ĐỐI cả chuỗi** — mỗi biến thể hậu tố là một dòng riêng.
  */
-export const SKU_NGOAI_LE = new Set(['838390', '836390', '816390', '818390']);
+export const SKU_NGOAI_LE = new Set(['836390', '836390-B', '838390', '838390-B']);
 
-export const laSkuNgoaiLe = model => SKU_NGOAI_LE.has(String(model).match(/^(\d+)/)?.[1] ?? '');
+/**
+ * 🔴 KHỚP **TUYỆT ĐỐI CẢ CHUỖI**, kể cả hậu tố — người dùng chốt 12/08/2026.
+ *
+ * Trước đó khớp theo phần số đầu (`816390-B` tính là `816390`), nên mọi biến thể hậu tố
+ * đều dính. Nay mỗi biến thể phải được liệt kê rõ: `836390` và `836390-B` là hai dòng
+ * riêng trong danh sách.
+ *
+ * ⚠️ Hệ quả của việc chốt danh sách: `816390`, `818390` và các biến thể `-B` của chúng
+ *    KHÔNG còn thuộc kho Calhoun. Chúng rơi về luật thường — Ground thì B2C, Misc thì B2B.
+ *    Đây là thay đổi có chủ ý, không phải sót.
+ */
+export const laSkuNgoaiLe = model => SKU_NGOAI_LE.has(String(model).trim().toUpperCase());
+
+/**
+ * 🔴 4 SKU LUÔN VỀ **B2B** — người dùng chốt 12/08/2026.
+ *
+ * Hàng nằm ở kho **Calhoun**, và slip của chúng thường ghi `Ship Via: Ground` (tức B2C).
+ * Bất kể slip ghi gì, chúng về sheet **B2B**. Đây là luật MẠNH NHẤT, thắng cả Ship Via.
+ *
+ * Danh sách này thay cho `SKU_LUON_UPS` cũ (đã bỏ 12/08): danh sách đó ép carrier `UPS`
+ * cho đúng bốn SKU mà luật mới bảo phải về B2B — hai luật ngược nhau, giữ cả hai thì
+ * đơn vừa được ép đi UPS vừa bị xếp vào luồng dựng BOL.
+ */
+export const SKU_B2B = SKU_NGOAI_LE;
+
+/**
+ * 4 SKU **ưu tiên B2C**, nhưng **hết tồn Lecangs thì rơi về B2B** (chốt 12/08/2026).
+ *
+ * Khớp **TUYỆT ĐỐI cả chuỗi** — `838250` và `838250-B` là hai dòng riêng.
+ * ⚠️ ĐỪNG nhầm với `maLecangs()`: hàm đó BỎ hậu tố khi **tra tồn kho**. Hai việc khác
+ *    nhau — phân loại thì phân biệt hậu tố, tra tồn kho thì gộp.
+ */
+export const SKU_B2C_UU_TIEN = new Set(['838250', '838250-B', '818250', '818250-B']);
+
+/** Khớp TUYỆT ĐỐI cả chuỗi, cùng luật với `laSkuNgoaiLe` ở trên. */
+export const laSkuB2CUuTien = model =>
+  SKU_B2C_UU_TIEN.has(String(model).trim().toUpperCase());
+
+/**
+ * ☑️ NƠI DUY NHẤT quyết định một dòng hàng thuộc **B2B** hay **B2C**.
+ *
+ * Trước 12/08/2026 mỗi tool tự phán đoán bằng luật riêng, và hai tool đã bất đồng về
+ * cùng một đơn (xem `00_SoatLoi_12082026.md` lỗi L1). Gom về một hàm để chuyện đó không
+ * lặp lại: sửa luật thì sửa đúng một chỗ.
+ *
+ * @param model    Model Number nguyên vẹn trên slip (giữ hậu tố)
+ * @param conHang  Kết quả tra tồn Lecangs cho SKU nhóm ưu tiên B2C:
+ *                   `true`  — có kho đủ số lượng   -> B2C
+ *                   `false` — không kho nào đủ     -> B2B
+ *                   `undefined` — CHƯA tra được (phiên Lecangs chết)
+ *                      -> **mặc định B2C** (người dùng chốt 12/08). Chọn B2C vì đó là
+ *                         luồng vốn có của chúng; đoán sang B2B sẽ dựng BOL cho hàng
+ *                         parcel, sai nặng hơn.
+ * @param laGround `Ship Via` trên slip có phải Ground không — chỉ dùng cho SKU thường
+ * @returns 'B2B' | 'B2C'
+ */
+export function phanLoaiSku(model, { conHang, laGround, bang } = {}) {
+  /* 🔴 LUẬT 0 — ALASKA VÀ HAWAII LUÔN VỀ B2B (người dùng chốt 12/08/2026).
+   *
+   * Mạnh hơn cả luật kho Calhoun, vì đây là ràng buộc về **nơi giao**, không phải về hàng.
+   * Lý do: bảng thứ tự kho chỉ phủ 48 bang lục địa. Đơn Ground đi AK/HI vì thế không chọn
+   * được kho gửi và trước đây rơi vào danh sách chờ người xem — nằm im vô thời hạn.
+   *
+   * Đưa về B2B thì chúng đi đường Misc quen thuộc: dựng BOL với ô hãng để trống, cột C
+   * ghi `NULL`. Khi bật lại khâu chọn hãng, hai bang này vẫn giữ `NULL` và ô hãng trên
+   * BOL vẫn trống, vì `carrier.csv` cũng không có AK/HI. */
+  if (BANG_LUON_B2B.has(String(bang || '').trim().toUpperCase())) return 'B2B';
+  if (laSkuNgoaiLe(model)) return 'B2B';                       // luật 1 — kho Calhoun
+  if (laSkuB2CUuTien(model)) return conHang === false ? 'B2B' : 'B2C';   // luật 2 — theo tồn kho
+  return laGround ? 'B2C' : 'B2B';                             // luật 3 — theo Ship Via
+}
+
+/**
+ * Hai bang mà **không bảng tra nào phủ tới**: `warehouse_ranking_by_state.csv` chỉ có 48
+ * bang lục địa + NCA/SCA, `carrier.csv` cũng vậy. Nên chúng luôn đi luồng B2B.
+ */
+export const BANG_LUON_B2B = new Set(['AK', 'HI']);
+
+/** SKU nào cần tra tồn kho TRƯỚC khi biết nó thuộc sheet nào. */
+export const canTraTonDePhanLoai = model => laSkuB2CUuTien(model);
 
 /* ---------------------------------------------------------------- kho ---- */
 
@@ -49,6 +128,54 @@ export function khoUuTien(bangKho, bang, model) {
                     `(file chi co 48 bang luc dia + NCA/SCA — KHONG co AK/HI)`);
   }
   return { ds, ngoaiLe: false };
+}
+
+/* ------------------------------------------------------- địa chỉ kho gửi ---- */
+
+/**
+ * `kho_dia_chi.csv` -> { SAV: {kho,tenCongTy,duong,city,state,zip,lienHe,phone} }
+ *
+ * 🔴 VÌ SAO CÓ FILE NÀY (08/08/2026). Form web chọn kho gửi bằng dropdown
+ *    "My Addresses" — chỉ cần TÊN kho, địa chỉ do UPS tự điền. **API không có
+ *    dropdown**: nó đòi địa chỉ ĐẦY ĐỦ trong `ShipFrom`/`Shipper`. Đây là dữ liệu
+ *    duy nhất mà đường API cần thêm so với đường trình duyệt.
+ *
+ * ⚠️ Lecangs KHÔNG cho địa chỉ kho — đã đo 08/08, cả hai endpoint mà UI của họ dùng
+ *    (`selectEnabledWarehouse`, `getWarehouseInfo`) chỉ trả mã kho. Số liệu trong file
+ *    này do người dùng lấy từ sổ địa chỉ UPS, tức đúng cái form web vẫn dùng.
+ *
+ * Khoá tra dùng `chuanKho()` nên `MEM-R` / `MEM R` / `memr` đều tìm ra một dòng.
+ */
+export async function docKhoDiaChi(duongDan = path.join(GOC, '05_TraCuu', 'kho_dia_chi.csv')) {
+  const txt = await fs.readFile(duongDan, 'utf8');
+  const ra = {};
+  for (const dong of txt.split(/\r?\n/).slice(1)) {
+    const c = tachCsv(dong);
+    if (c.length < 6 || !c[0]) continue;
+    ra[chuanKho(c[0])] = { kho: c[0], tenCongTy: c[1], duong: c[2], city: c[3],
+                           state: c[4], zip: c[5], lienHe: c[6] || '', phone: c[7] || '' };
+  }
+  return ra;
+}
+
+/** So tên kho bỏ qua `-`, khoảng trắng, hoa thường: UPS ghi `MEM R`, CSV ghi `MEM-R`. */
+export const chuanKho = t => String(t).toUpperCase().replace(/[\s_-]+/g, '');
+
+/**
+ * Tra một kho. Thiếu trường bắt buộc thì NÉM LỖI — UPS từ chối `Name` rỗng, và
+ * label ghi sai bên gửi thì hàng về nhầm chỗ khi bị trả.
+ */
+export function traKho(bangKhoDiaChi, kho) {
+  const k = bangKhoDiaChi[chuanKho(kho)];
+  if (!k) {
+    throw new Error(`kho "${kho}" khong co trong kho_dia_chi.csv (co: ` +
+      Object.values(bangKhoDiaChi).map(x => x.kho).join(', ') + ')');
+  }
+  for (const [ten, v] of [['ten_cong_ty', k.tenCongTy], ['duong', k.duong], ['city', k.city],
+                          ['state', k.state], ['zip', k.zip], ['dien_thoai', k.phone]]) {
+    if (!v) throw new Error(`kho "${k.kho}": thieu "${ten}" trong kho_dia_chi.csv`);
+  }
+  return k;
 }
 
 /* -------------------------------------------------------------- kích thước ---- */
@@ -169,4 +296,66 @@ export function diaChiGiao(shipTo) {
     state:     bang,                      // slip gọi `bang`, form UPS gọi `state`
     dienThoai: phone || ''
   };
+}
+
+/* ===========================================================================
+ *  Chia lô theo kho — dùng bởi `xu-ly-ground.mjs`
+ *  Đặt ở đây vì `xu-ly-ground.mjs` gọi `main()` ngay khi import nên không test
+ *  được từ ngoài, còn hai hàm này là logic thuần, không chạm mạng.
+ * ======================================================================== */
+
+export const chuanTen = s => String(s || '').trim().toUpperCase();
+
+/**
+ * Chia các dòng hàng thành các lô theo kho — mỗi lô sẽ thành MỘT shipment.
+ *
+ * Người dùng chốt 12/08/2026: đơn mà không kho nào còn đủ mọi mã thì **tách 2 shipment,
+ * mỗi lần 1 kho, điền giống PO number**. Trước đó tool dừng và báo người.
+ *
+ * Thứ tự xét — không đảo:
+ *   1. Còn kho nào đủ **mọi** mã thì dùng kho đó, một shipment. Gộp vẫn hơn tách:
+ *      khách nhận một lần, và ta không tạo thêm đơn xuất kho nào.
+ *   2. Không có thì mỗi mã lấy ở kho ưu tiên cao nhất còn đủ **mã đó**, rồi gộp các mã
+ *      trùng kho lại. Ưu tiên theo bang giao, dùng lại `x.uuTien.ds`.
+ *   3. Mã nào không kho nào đủ -> NÉM LỖI. Không tách nhỏ qty của một mã ra hai kho:
+ *      "mỗi mã một kho" là điều đã được chốt, tách sâu hơn thì chưa ai duyệt.
+ */
+export function chiaTheoKho(po, tonTheoSku, dsUuTien) {
+  const conO = (hang, tenKho, qty) => {
+    const h = hang.find(z => chuanTen(z.kho) === chuanTen(tenKho));
+    return !!h && h.con >= qty;
+  };
+
+  const duMoiSku = dsUuTien.filter(tenKho =>
+    tonTheoSku.every(({ k, hang }) => conO(hang, tenKho, k.qty)));
+  if (duMoiSku.length) return [{ tenKho: duMoiSku[0], kien: tonTheoSku.map(t => t.k) }];
+
+  const thieu = [], theoKho = new Map();
+  for (const { k, hang } of tonTheoSku) {
+    const tenKho = dsUuTien.find(z => conO(hang, z, k.qty));
+    if (!tenKho) {
+      thieu.push(`${k.model} x${k.qty} (ton: ${hang.map(h => `${h.kho}=${h.con}`).join(' · ') || 'khong kho nao co'})`);
+      continue;
+    }
+    if (!theoKho.has(tenKho)) theoKho.set(tenKho, []);
+    theoKho.get(tenKho).push(k);
+  }
+  if (thieu.length) {
+    throw new Error(`${po}: KHONG kho nao du hang cho ${thieu.join(' | ')}. ` +
+      `Uu tien: ${dsUuTien.join('>')}. -> DUNG, hoi nguoi dung.`);
+  }
+  // Giữ đúng thứ tự ưu tiên để log và tên file ổn định giữa các lần chạy.
+  return dsUuTien.filter(z => theoKho.has(z)).map(z => ({ tenKho: z, kien: theoKho.get(z) }));
+}
+
+/**
+ * Bằng chứng đời cũ (trước 12/08/2026) để `shipmentId`/`kho` ngay ở gốc, chưa có `lo`.
+ * Dựng `lo` cho chúng, nếu không đơn đã chạy sẽ bị coi là chưa tạo shipment nào và
+ * lần chạy sau **mua lại nhãn** cho đúng đơn đó.
+ */
+export function nangBangChungDoiCu(bc) {
+  if (!bc) return null;
+  if (Array.isArray(bc.lo)) return bc;
+  return { ...bc, lo: [{ kho: bc.kho, shipmentId: bc.shipmentId, cuoc: bc.cuoc,
+                         soKien: (bc.kien || []).length }] };
 }

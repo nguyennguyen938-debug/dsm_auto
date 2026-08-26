@@ -42,10 +42,55 @@ export async function coManHinh() {
  * Mở context. NHỚ gọi `await ctx.close()` — profile chỉ được ghi đầy đủ khi đóng sạch.
  * @param headless chỉ đặt true khi CHẮC CHẮN không đụng ups.com.
  */
+/**
+ * Dọn `SingletonLock` — nhưng CHỈ khi nó là khoá sót của tiến trình đã chết.
+ *
+ * 🔴 Nền: Chrome đặt khoá này để hai tiến trình không mở cùng profile. Lần chạy trước
+ *    thoát không sạch thì khoá ở lại, và `launchPersistentContext` mở profile nhưng
+ *    **KHÔNG nạp được cookie** -> `vaoLecangs()` thấy trang đăng nhập rồi báo "hết
+ *    phiên", trong khi `OMS-Token` vẫn còn hạn tới 18/08. Mất cả buổi 11/08 vì tưởng
+ *    phiên chết thật và suýt đăng nhập lại — mà đăng nhập lại chính là thứ nguy hiểm
+ *    với tài khoản đã có 6 lần sai.
+ *
+ * 🔴 Nhưng bản 11/08 xoá khoá VÔ ĐIỀU KIỆN, và thế là mất luôn tác dụng bảo vệ:
+ *    hai tiến trình cùng mở profile thì cái thứ hai đè cái thứ nhất thay vì bị chặn.
+ *    Chạy tay `nap-cookie.mjs` hay `kiem-phien-lecangs.mjs` đúng lúc cron đang chạy
+ *    là hỏng phiên — mà xin lại cookie Lecangs phải nhờ người dùng.
+ *    -> Đọc PID trong khoá, còn sống thì DỪNG, chết rồi mới xoá. (Sửa 13/08/2026.)
+ *
+ * ⛔ KHÔNG dùng `pgrep`/`pkill` ở đây — máy này chạy chung với `/opt/wayfair`, xem
+ *    CLAUDE.md quy tắc 10. `process.kill(pid, 0)` chỉ HỎI tiến trình còn sống không,
+ *    không gửi tín hiệu gì.
+ */
+export async function donKhoaSot() {
+  const khoa = path.join(PROFILE, 'SingletonLock');
+  let dich;
+  try { dich = await fs.readlink(khoa); }
+  catch { return; }                       // không có khoá, hoặc không phải symlink -> kệ
+
+  // Chrome ghi symlink dạng `<hostname>-<pid>`
+  const m = /-(\d+)$/.exec(dich);
+  const pid = m ? Number(m[1]) : NaN;
+  if (Number.isFinite(pid) && pid > 0) {
+    let song = false;
+    try { process.kill(pid, 0); song = true; }         // chỉ hỏi, KHÔNG giết
+    catch (e) { song = e.code === 'EPERM'; }           // EPERM = còn sống, của user khác
+    if (song) {
+      throw new Error(
+        `profile ${PROFILE} dang bi tien trinh ${pid} giu (SingletonLock -> ${dich}).\n` +
+        `   Doi no xong roi chay lai. Neu chac chan tien trinh do da treo, tat no theo PID ` +
+        `roi chay lai — DUNG xoa tay file SingletonLock khi Chrome con song.`);
+    }
+  }
+  await fs.rm(khoa, { force: true }).catch(() => {});
+}
+
 export async function moContext({ headless = false } = {}) {
   if (!headless && !await coManHinh()) {
     throw new Error(`khong co man hinh ${MAN_HINH} — chay "10_VM_Tool/vnc.sh bat" truoc`);
   }
+  await donKhoaSot();
+
   return chromium.launchPersistentContext(PROFILE, {
     headless,
     viewport: { width: 1500, height: 950 },
@@ -85,7 +130,7 @@ export async function moContextCDP({ cong = 9222 } = {}) {
     ip4 = (await dns.resolve4('challenges.cloudflare.com'))[0] || '';
   } catch { /* khong sao, chi mat mot nguyen nhan */ }
 
-  await fs.rm(path.join(PROFILE, 'SingletonLock'), { force: true }).catch(() => {});
+  await donKhoaSot();
   const cha = spawn(CHROME, [
     `--user-data-dir=${PROFILE}`, '--no-first-run', '--no-default-browser-check',
     `--remote-debugging-port=${cong}`, '--window-size=1500,950',

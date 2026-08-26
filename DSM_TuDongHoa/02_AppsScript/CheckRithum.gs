@@ -83,6 +83,10 @@ function checkRithumOrders() {
         var rows = _parseRithumRows(msg.getBody());
         rows.forEach(function (o) {
           if (!o.po || existing[o.po] || existing[_poKey(o.po)]) return;   // bỏ PO trùng / rỗng
+          /* Ngày rỗng thì VẪN thêm đơn — thiếu ngày còn hơn mất đơn. Nhưng phải kêu lên:
+           * cột A trống là thứ chỉ phát hiện được bằng mắt, và sau đó không nơi nào điền
+           * bù (fillRow không chạm cột A). Xem DIAG_ngayThieu() / FIX_buNgayOrder(). */
+          if (!String(o.date || '').trim()) Logger.log('⚠️ PO ' + o.po + ': mail KHONG co Order Date -> cot A se trong');
           toAdd.push([o.date, o.po]);              // A = Order Date, B = PO Number
           existing[o.po] = true;                   // chống trùng trong cùng lượt chạy
         });
@@ -148,6 +152,104 @@ function FIX_poLeadingZero() {
     fixed++;
   }
   Logger.log((DRY_RUN ? '[XEM TRƯỚC] ' : '') + 'Ô dạng số đã xử lý: ' + fixed + ' | ô đã là text, bỏ qua: ' + skipped);
+}
+
+/* ================================================================= cột A trống ===
+ *  Thêm 11/08/2026 sau khi người dùng thấy `06561441` và `79794505` có PO nhưng
+ *  KHÔNG có Order Date.
+ *
+ *  Cột A chỉ có đúng MỘT nơi ghi: `checkRithumOrders()` ở trên, ghi A và B cùng lúc
+ *  (`toAdd.push([o.date, o.po])`). `fillRow` của web app **không bao giờ chạm cột A** —
+ *  đã soát lại toàn hàm. Nên PO có mà ngày trống chỉ có ba đường:
+ *
+ *    1. mail Rithum đọc ra PO nhưng **cột ngày rỗng** -> `o.date` = '' , vẫn thêm hàng
+ *    2. hàng do `fillRow` tạo vì lúc đó PO **chưa có** trên sheet (chỉ ghi cột B)
+ *    3. ai đó xoá nội dung cột A, rồi `checkRithumOrders` bỏ qua vì PO đã tồn tại
+ *
+ *  `DIAG_ngayThieu()` phân biệt được ba đường đó: nó tra lại chính mail Rithum.
+ *  Không đoán — chạy rồi đọc log.
+ * =============================================================================== */
+
+/**
+ * 🔎 Liệt kê mọi hàng có PO nhưng cột A trống, và tra xem mail Rithum có ngày không.
+ * KHÔNG ghi gì.
+ */
+function DIAG_ngayThieu() {
+  var sh = SpreadsheetApp.openById(RITHUM.SHEET_ID).getSheetByName(RITHUM.SHEET_NAME);
+  var start = RITHUM.HEADER_ROWS + 1, last = sh.getLastRow();
+  if (last < start) { Logger.log('Sheet chua co du lieu.'); return; }
+
+  var vals = sh.getRange(start, RITHUM.COL_ORDERDATE, last - RITHUM.HEADER_ROWS, 2).getValues();
+  var thieu = [];
+  for (var i = 0; i < vals.length; i++) {
+    var po = String(vals[i][1]).trim();
+    if (po && !String(vals[i][0]).trim()) thieu.push({ hang: start + i, po: po });
+  }
+  if (!thieu.length) { Logger.log('✅ Khong hang nao thieu cot A.'); return; }
+  Logger.log('Co ' + thieu.length + ' hang thieu Order Date: ' +
+             thieu.map(function (x) { return x.po + '(h' + x.hang + ')'; }).join(', '));
+
+  // Tra lai mail: PO nao co trong mail, va mail cho ra ngay gi.
+  var q = 'subject:"' + RITHUM.SUBJECT + '" newer_than:' + RITHUM.SEARCH_DAYS + 'd in:anywhere';
+  var trong = {};
+  GmailApp.search(q, 0, 200).forEach(function (th) {
+    th.getMessages().forEach(function (m) {
+      if (String(m.getSubject() || '').indexOf(RITHUM.SUBJECT) === -1) return;
+      _parseRithumRows(m.getBody()).forEach(function (o) {
+        if (!trong[o.po]) trong[o.po] = { date: o.date, luc: m.getDate() };
+      });
+    });
+  });
+
+  for (var k = 0; k < thieu.length; k++) {
+    var t = thieu[k], g = trong[t.po] || trong[_poKey(t.po)];
+    if (!g)            Logger.log('  ' + t.po + ' (hang ' + t.hang + '): KHONG thay trong mail ' +
+                                  RITHUM.SEARCH_DAYS + ' ngay gan day -> duong 2 hoac 3 (fillRow tao, hoac bi xoa tay)');
+    else if (!g.date)  Logger.log('  ' + t.po + ' (hang ' + t.hang + '): mail CO PO nhung cot ngay RONG -> duong 1, loi parser');
+    else               Logger.log('  ' + t.po + ' (hang ' + t.hang + '): mail co ngay "' + g.date +
+                                  '" -> duong 3 (ngay tung co roi bi xoa). Chay FIX_buNgayOrder() de dien lai');
+  }
+}
+
+/**
+ * 🛠 Điền lại Order Date cho những hàng có PO mà cột A trống, lấy từ chính mail Rithum.
+ *
+ * An toàn: **chỉ ghi vào ô đang TRỐNG**, không đụng hàng đã có ngày. PO không tìm được
+ * trong mail thì bỏ qua và ghi rõ trong log — không đoán ngày từ nguồn khác.
+ * Đặt `DRY_RUN = true` để xem trước.
+ */
+function FIX_buNgayOrder() {
+  var DRY_RUN = false;
+
+  var sh = SpreadsheetApp.openById(RITHUM.SHEET_ID).getSheetByName(RITHUM.SHEET_NAME);
+  var start = RITHUM.HEADER_ROWS + 1, last = sh.getLastRow();
+  if (last < start) { Logger.log('Sheet chua co du lieu.'); return; }
+
+  var q = 'subject:"' + RITHUM.SUBJECT + '" newer_than:' + RITHUM.SEARCH_DAYS + 'd in:anywhere';
+  var trong = {};
+  GmailApp.search(q, 0, 200).forEach(function (th) {
+    th.getMessages().forEach(function (m) {
+      if (String(m.getSubject() || '').indexOf(RITHUM.SUBJECT) === -1) return;
+      _parseRithumRows(m.getBody()).forEach(function (o) {
+        if (o.date && !trong[o.po]) trong[o.po] = o.date;
+      });
+    });
+  });
+
+  var vals = sh.getRange(start, RITHUM.COL_ORDERDATE, last - RITHUM.HEADER_ROWS, 2).getValues();
+  var dien = 0, khong = [];
+  for (var i = 0; i < vals.length; i++) {
+    var po = String(vals[i][1]).trim();
+    if (!po || String(vals[i][0]).trim()) continue;          // khong co PO, hoac da co ngay
+    var d = trong[po] || trong[_poKey(po)];
+    if (!d) { khong.push(po); continue; }
+    Logger.log('  hang ' + (start + i) + '  ' + po + '  -> "' + d + '"');
+    if (!DRY_RUN) sh.getRange(start + i, RITHUM.COL_ORDERDATE).setValue(d);
+    dien++;
+  }
+  if (!DRY_RUN && dien) SpreadsheetApp.flush();
+  Logger.log((DRY_RUN ? '[XEM TRUOC] ' : '') + 'Da dien ' + dien + ' o' +
+             (khong.length ? ' | KHONG tim duoc trong mail: ' + khong.join(', ') : ''));
 }
 
 /**

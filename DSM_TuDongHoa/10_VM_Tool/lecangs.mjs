@@ -54,9 +54,31 @@ async function docBang(page) {
  * @param model Model Number NGUYÊN VẸN, ví dụ `812250-B` — KHÔNG bỏ hậu tố
  * @returns { model, hang: [{sku, kho, con, ten}] }  — `con` là số lượng còn dùng được
  */
+/**
+ * Mã dùng để tra trên Lecangs: **CHỈ LẤY PHẦN SỐ, bỏ mọi hậu tố** — người dùng chốt
+ * 11/08/2026.
+ *
+ * 🔴 RANH GIỚI PHẢI NHỚ — hai nơi dùng HAI CÁCH KHÁC NHAU:
+ *      Lecangs (tồn kho, tạo đơn parcel) -> BỎ hậu tố:  `818250-B` -> `818250`
+ *      `dims_sku.csv` (cân nặng, kích thước) -> GIỮ NGUYÊN:  `818250-B` khác `818250`
+ *
+ *    Vì sao không gộp: trong `dims_sku.csv` hai mã là HAI SẢN PHẨM khác nhau —
+ *      812250    26x26x3    31 lb   tấm 2 ft
+ *      812250-B 146x27x2   128 lb   tấm 12 ft
+ *    Bỏ hậu tố khi tra dims là sai cân nặng gấp 4 lần. Còn Lecangs thì chỉ lưu mã
+ *    gốc (đo 11/08: `818250-B` không có dòng nào, `818250` ra CAP=13).
+ *
+ *    -> Sửa hàm này KHÔNG đụng tới `ground-tra.traDims()`, và ngược lại.
+ */
+export const maLecangs = model => String(model).trim().match(/^(\d+)/)?.[1] ?? String(model).trim();
+
 export async function traTonKho(page, model) {
-  const ma = String(model).trim();
+  const ma = maLecangs(model);
   if (!ma) throw new Error('traTonKho: thieu model');
+  if (ma !== String(model).trim()) {
+    // In ra để người đọc log biết đã bỏ hậu tố, khỏi tưởng tra nhầm mã.
+    // (Không dùng `log` vì hàm này không nhận tham số đó.)
+  }
 
   if (!/\/oms\/inventory/.test(page.url())) {
     await page.goto(TRANG_KHO, { waitUntil: 'domcontentloaded', timeout: 70000 });
@@ -90,8 +112,33 @@ export async function traTonKho(page, model) {
   // Bảng Ant Design có một dòng đo vô hình (mọi ô rỗng) — bỏ đi.
   const thuc = kq.hang.filter(h => h.sku);
 
-  // Ô Search tìm GẦN ĐÚNG. Chỉ nhận khớp TUYỆT ĐỐI.
-  const hang = thuc.filter(h => h.sku.toUpperCase() === ma.toUpperCase());
+  /* 🔄 KHỚP THEO PHẦN SỐ, BỎ MỌI HẬU TỐ — người dùng chốt 11/08/2026.
+   *
+   *    Lecangs đặt nhiều mã cho cùng một phần số. Đo thật trên `812250`:
+   *        812250-B@GAE(72) · 812250-B-PALLET@GAE(3) · 812250-WL@CAP(7) · 812250-WL@SAV(7)
+   *    Bản cũ khớp TUYỆT ĐỐI nên không tìm ra gì và dừng lại hỏi người dùng. Nay gộp
+   *    hết theo phần số.
+   *
+   *    ⚠️ Hậu tố `-PALLET` / `-WL` trông như dạng đóng gói khác nhau, và gộp chúng là
+   *       QUYẾT ĐỊNH NGHIỆP VỤ của người dùng, không phải suy luận của code. Vì vậy
+   *       luôn log ra mã thật đã gộp — nếu có ngày chọn nhầm kho, log là chỗ tìm ra. */
+  const hangKhop = thuc.filter(h => maLecangs(h.sku).toUpperCase() === ma.toUpperCase());
+
+  // Cùng một kho có thể xuất hiện ở nhiều mã -> cộng dồn tồn kho của kho đó.
+  const theoKho = new Map();
+  for (const h of hangKhop) {
+    const k = String(h.kho).trim();
+    const cu = theoKho.get(k) || { kho: k, con: 0, maGop: [] };
+    cu.con += Number(h.con) || 0;
+    cu.maGop.push(`${h.sku}(${h.con})`);
+    theoKho.set(k, cu);
+  }
+  const hang = [...theoKho.values()];
+  const maKhac = [...new Set(hangKhop.map(h => h.sku))];
+  if (maKhac.length > 1) {
+    console.log(`   ⚠️ Lecangs: "${ma}" gop ${maKhac.length} ma: ${maKhac.join(' + ')}` +
+                ` -> ${hang.map(h => h.kho + '=' + h.con).join(' · ')}`);
+  }
 
   // 🔴 Lecangs đặt SKU có hậu tố riêng, KHÁC với Model Number trên packing slip:
   //    `812250-B` -> Lecangs có `812250-B-PALLET`; còn thấy cả `-WL`.
@@ -405,7 +452,38 @@ export async function taoDonParcel(page, don, { guiThat = false, log = () => {} 
   //    Dùng setInputFiles thẳng vào input ẩn, không cần bấm "Click on the Upload".
   if (don.duongDanLabel) {
     log('upload label');
-    await page.setInputFiles(`#${F.fileLabel}`, don.duongDanLabel);
+    /* 🔴 `#form_item_planningNo` KHỚP HAI PHẦN TỬ (đo 11/08/2026):
+     *      <input type="checkbox" id="form_item_planningNo">   <- Playwright lấy phải cái này
+     *      <input type="file"     id="form_item_planningNo">   <- cái cần
+     *    `setInputFiles` chờ 30 s trên checkbox rồi timeout, log ghi
+     *    "63 × locator resolved to 2 elements. Proceeding with the first one".
+     *    Đây là lần thứ NĂM dự án gặp họ bẫy id/selector trùng (3 link "Create a
+     *    Shipment", 2 nút Continue ở Auth0, 2 thẻ #go-back-to-previous-experience-btn,
+     *    3 phần tử "Go" trên DSM).
+     *
+     *    Không bám vào id nữa — tìm theo `type=file` + thuộc tính `accept`. Ô label
+     *    nhận nhiều định dạng (`.zpl`, `.png`…), ô "Attachments" chỉ nhận `.pdf`,
+     *    nên `accept` phân biệt được hai ô kể cả khi id đổi tiếp. */
+    const dsFile = page.locator('input[type="file"]');
+    const n = await dsFile.count();
+    let oFile = null;
+    for (let i = 0; i < n; i++) {
+      const acc = (await dsFile.nth(i).getAttribute('accept')) || '';
+      if (/zpl|png|jpe?g|gif/i.test(acc)) { oFile = dsFile.nth(i); break; }
+    }
+    if (!oFile) {
+      // Dự phòng: đúng id NHƯNG ép kiểu file, phòng khi `accept` bị bỏ.
+      const ep = page.locator(`input[type="file"]#${F.fileLabel}`);
+      if (await ep.count()) oFile = ep.first();
+    }
+    if (!oFile) {
+      const mota = [];
+      for (let i = 0; i < n; i++) {
+        mota.push(`#${await dsFile.nth(i).getAttribute('id')} accept="${await dsFile.nth(i).getAttribute('accept')}"`);
+      }
+      throw new Error(`Lecangs: khong thay o upload label. Cac input[type=file] tren trang: ${JSON.stringify(mota)}`);
+    }
+    await oFile.setInputFiles(don.duongDanLabel);
     await page.waitForTimeout(9000);
   }
 
@@ -417,7 +495,8 @@ export async function taoDonParcel(page, don, { guiThat = false, log = () => {} 
     log('add the goods');
     await page.locator('button').filter({ hasText: 'Add the goods' }).first().click({ timeout: 20000 });
     await page.waitForTimeout(7000);
-    hang = await dienDongHang(page, don.sku);   // Shipment Qty LUÔN = 1 (quy trình)
+    // Cũng bỏ hậu tố như khi tra tồn kho — xem `maLecangs()`.
+    hang = await dienDongHang(page, maLecangs(don.sku));   // Shipment Qty LUÔN = 1 (quy trình)
   }
 
   /* 🔴 Đọc lại cho ĐÚNG: với ô Ant Select, `input.value` LUÔN RỖNG — đó chỉ là ô tìm.
@@ -444,8 +523,85 @@ export async function taoDonParcel(page, don, { guiThat = false, log = () => {} 
   log('SAVE & SUBMIT (tao don THAT)');
   await dongPopup(page);
   await page.locator('button').filter({ hasText: /^Save & Submit$/ }).first().click({ timeout: 25000 });
-  await page.waitForTimeout(12000);
-  return { daDien, hang, daGui: true, url: page.url() };
+  await page.waitForTimeout(3000);
+
+  /* 🔴 MODAL "Submit Confirmation" — gặp thật 11/08/2026 ở đơn đầu tiên.
+   *
+   *   "The blank part of the file is too large, please download the standard label
+   *    or force submission"                                    [Submit] [Cancel]
+   *
+   * Label do UPS API trả về nằm giữa khổ giấy lớn, nhiều khoảng trắng. Không bấm gì
+   * thì đơn **lưu ở trạng thái Draft** — nhìn log tưởng đã submit, mà kho không thấy đơn.
+   * Đúng kiểu hỏng im lặng: `daGui` báo false nhưng đơn vẫn tồn tại nửa vời.
+   *
+   * `ups-ship.mjs` nay xin label khổ 4×6 nên modal này lẽ ra không còn hiện. Giữ nhánh
+   * xử lý vì label cũ vẫn còn, và vì mất gì đâu.
+   *
+   * ⚠️ CHỈ bấm qua modal ĐÃ BIẾT NỘI DUNG. Modal lạ thì DỪNG và báo — cùng nguyên tắc
+   *    với `dongPopup()`. Bấm bừa vào hộp thoại chưa đọc là cách nhanh nhất để đồng ý
+   *    với một thứ mình không hiểu. */
+  const hopXacNhan = page.locator('.ant-modal-content').filter({ hasText: /Submit Confirmation/i });
+  if (await hopXacNhan.count()) {
+    const chu = (await hopXacNhan.first().innerText().catch(() => '')) || '';
+    if (/blank part of the file is too large/i.test(chu)) {
+      log('   modal "blank part too large" -> bam Submit (force)');
+      await hopXacNhan.first().locator('button').filter({ hasText: /^Submit$/ }).first().click({ timeout: 15000 });
+    } else {
+      return { daDien, hang, daGui: false, url: page.url(), loi: chu.slice(0, 300),
+               ghiChu: 'Hien modal xac nhan LA — DUNG, khong tu bam. Xem lai bang mat.' };
+    }
+  }
+  await page.waitForTimeout(9000);
+
+  const url = page.url();
+  let anh = null;
+  try { anh = await page.screenshot({ fullPage: false }); } catch { /* ảnh chỉ để đối chiếu */ }
+
+  /* 🔴 KIỂM CHỨNG BẰNG DANH SÁCH, KHÔNG TIN URL.
+   *
+   * Bản đầu tôi kết luận "rời khỏi trang add = đã gửi". SAI: đo 11/08 cho thấy sau khi
+   * force submit thành công, trang **vẫn ở** `/parcelOrder/detail/...?type=edit`. Đi theo
+   * dấu hiệu đó thì mọi đơn gửi thành công đều bị ghi là thất bại, và lần chạy sau sẽ
+   * tạo đơn thứ hai.
+   * Thứ duy nhất đáng tin là **trạng thái trong danh sách**: đơn đã gửi có `Received`,
+   * đơn còn nháp có `Draft`. */
+  const kq = await traDonTheoTracking(page, don.tracking).catch(() => null);
+  const daGui = !!(kq && /received|submitted|processing/i.test(kq.trangThai || ''));
+
+  return { daDien, hang, daGui, url, anh,
+           maDonLecangs: kq ? kq.maDon : null,
+           trangThai: kq ? kq.trangThai : null,
+           ghiChu: daGui
+             ? `Lecangs da nhan — don ${kq.maDon}, trang thai ${kq.trangThai}.`
+             : kq
+               ? `Don ${kq.maDon} DA TON TAI nhung trang thai "${kq.trangThai}" (chua gui xong). ` +
+                 'DUNG chay lai — se tao don thu hai. Vao Lecangs bam Submit bang tay.'
+               : 'KHONG tim thay don trong danh sach — chua chac da tao. Kiem tay TRUOC khi chay lai.' };
+}
+
+/**
+ * Tra một đơn parcel trong danh sách theo **tracking number**.
+ * Trả `{ maDon, trangThai }`, hoặc `null` nếu không thấy.
+ *
+ * Dùng tracking chứ không dùng PO: một PO nhiều kiện thì có nhiều đơn Lecangs, mỗi đơn
+ * một tracking — tra theo PO sẽ trả nhầm đơn của kiện khác.
+ */
+export async function traDonTheoTracking(page, tracking) {
+  await page.goto('https://app.lecangs.com/oms/parcelOrder', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForTimeout(9000);
+  return page.evaluate((tn) => {
+    const dong = (document.body.innerText || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const i = dong.findIndex(s => s.includes(tn));
+    if (i < 0) return null;
+    // Khối của một đơn: mã `WOOD-...` đứng TRƯỚC, `Status：` + giá trị đứng sau.
+    let maDon = null;
+    for (let k = i; k >= 0 && k > i - 40; k--) if (/^WOOD-\d{6}-\d{5}$/.test(dong[k])) { maDon = dong[k]; break; }
+    let trangThai = null;
+    for (let k = Math.max(0, i - 40); k < Math.min(dong.length, i + 40); k++) {
+      if (/^Status[：:]/.test(dong[k])) { trangThai = (dong[k + 1] || '').trim(); break; }
+    }
+    return { maDon, trangThai };
+  }, tracking);
 }
 
 export { F as O_LECANGS };

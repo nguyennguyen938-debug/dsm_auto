@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline xử lý đơn — DSM AllForWood</title>
+<style>*{box-sizing:border-box}html,body{margin:0;padding:0}</style>
+</head>
+<body>
+<style>
+:root{
+  --bg:#E5E5E2; --card:#F4F4F2; --ink:#1E1E22; --dim:#525258; --faint:#727277;
+  --line:#CFCFD3; --line2:#B9B9BE;
+  --b2b:#B45309; --b2b-bg:#FEF3E2;
+  --b2c:#0F766E; --b2c-bg:#E6F4F1;
+  --stop:#B91C1C; --stop-bg:#FEECEB;
+  --run:#3F6212; --run-bg:#EFF4E4;
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#131316; --card:#1B1B1F; --ink:#F4F4F5; --dim:#B4B4BB; --faint:#8E8E96;
+    --line:#2C2C31; --line2:#3A3A41;
+    --b2b:#F0A657; --b2b-bg:#2C1F10;
+    --b2c:#5EC7B8; --b2c-bg:#0E2724;
+    --stop:#F08C86; --stop-bg:#2E1614;
+    --run:#A9CC6B; --run-bg:#1D2412;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131316; --card:#1B1B1F; --ink:#F4F4F5; --dim:#B4B4BB; --faint:#8E8E96;
+  --line:#2C2C31; --line2:#3A3A41;
+  --b2b:#F0A657; --b2b-bg:#2C1F10;
+  --b2c:#5EC7B8; --b2c-bg:#0E2724;
+  --stop:#F08C86; --stop-bg:#2E1614;
+  --run:#A9CC6B; --run-bg:#1D2412;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);
+     font-size:17px;line-height:1.7;-webkit-font-smoothing:antialiased}
+.page{max-width:820px;margin:0 auto;padding:0 22px 100px}
+
+/* ---------- đầu trang ---------- */
+header{padding:60px 0 32px;border-bottom:2px solid var(--ink);margin-bottom:8px}
+.kicker{font-family:var(--mono);font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;
+        color:var(--faint);margin:0 0 12px}
+h1{font-size:clamp(28px,5vw,40px);line-height:1.18;margin:0 0 14px;font-weight:700;letter-spacing:-.02em;text-wrap:balance}
+.sub{font-size:18.5px;color:var(--dim);margin:0;max-width:60ch}
+
+/* ---------- tiêu đề ---------- */
+h2{font-size:24px;font-weight:700;margin:56px 0 4px;letter-spacing:-.015em;
+   padding-top:26px;border-top:1px solid var(--line);scroll-margin-top:20px;text-wrap:balance}
+h2:first-of-type{border-top:none;padding-top:0}
+h3{font-size:17.5px;font-weight:650;margin:30px 0 4px}
+p{margin:0 0 15px}
+.intro{color:var(--dim);margin-bottom:22px}
+code{font-family:var(--mono);font-size:.86em;background:var(--card);
+     border:1px solid var(--line);border-radius:3px;padding:1.5px 5px;white-space:nowrap}
+strong{font-weight:650}
+
+/* ---------- nhãn ---------- */
+.chip{display:inline-block;font-size:13px;font-weight:600;padding:2.5px 9px;border-radius:4px;
+      white-space:nowrap;line-height:1.5}
+.c-b2b{background:var(--b2b-bg);color:var(--b2b)}
+.c-b2c{background:var(--b2c-bg);color:var(--b2c)}
+.c-stop{background:var(--stop-bg);color:var(--stop)}
+.c-run{background:var(--run-bg);color:var(--run)}
+.c-off{background:var(--card);color:var(--faint);border:1px solid var(--line)}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 18px}
+
+/* ---------- các bước nối nhau ---------- */
+.flow{list-style:none;padding:0;margin:24px 0;counter-reset:s}
+.flow>li{position:relative;padding:0 0 22px 46px;counter-increment:s}
+.flow>li::before{content:counter(s);position:absolute;left:0;top:1px;width:29px;height:29px;
+  border-radius:50%;background:var(--card);border:1.5px solid var(--line2);color:var(--dim);
+  font-family:var(--mono);font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.flow>li::after{content:"";position:absolute;left:14px;top:32px;bottom:2px;width:1.5px;background:var(--line)}
+.flow>li:last-child{padding-bottom:0}
+.flow>li:last-child::after{display:none}
+.flow h4{margin:2px 0 3px;font-size:17px;font-weight:650}
+.flow p{margin:0 0 6px;color:var(--dim);font-size:16px}
+.flow .who{font-family:var(--mono);font-size:12.5px;color:var(--faint)}
+.flow>li.stop::before{background:var(--stop-bg);border-color:var(--stop);color:var(--stop)}
+.flow>li.b2b::before{background:var(--b2b-bg);border-color:var(--b2b);color:var(--b2b)}
+.flow>li.b2c::before{background:var(--b2c-bg);border-color:var(--b2c);color:var(--b2c)}
+
+/* ---------- hộp lưu ý ---------- */
+.box{border:1px solid var(--line);border-left:4px solid var(--line2);border-radius:0 6px 6px 0;
+     padding:16px 18px;margin:22px 0;background:var(--card)}
+.box .t{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+        margin:0 0 6px;color:var(--dim)}
+.box p{margin:0 0 8px;font-size:16px}
+.box p:last-child{margin:0}
+.box.stop{border-left-color:var(--stop)} .box.stop .t{color:var(--stop)}
+.box.b2c{border-left-color:var(--b2c)} .box.b2c .t{color:var(--b2c)}
+.box.b2b{border-left-color:var(--b2b)} .box.b2b .t{color:var(--b2b)}
+
+/* ---------- bảng ---------- */
+.tw{overflow-x:auto;margin:22px 0;border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:15.5px;min-width:480px;background:var(--card)}
+th,td{text-align:left;padding:11px 15px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;font-weight:650;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;
+   background:var(--bg)}
+tr:last-child td{border-bottom:none}
+td code{white-space:normal}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* ---------- sơ đồ ---------- */
+figure{margin:26px 0}
+figure svg{display:block;width:100%;height:auto;color:var(--ink)}
+figcaption{font-size:15px;color:var(--dim);margin-top:12px}
+figcaption b{color:var(--ink)}
+
+
+/* ---------- bản đồ đầy đủ: bản vẽ kỹ thuật trên nền giấy ---------- */
+.blueprint{--bw:min(1120px, calc(100vw - 36px));
+           width:var(--bw); margin-left:calc(50% - var(--bw)/2);
+           overflow-x:auto; padding:4px 0 8px}
+.blueprint svg{display:block;width:1080px;max-width:none;height:auto;color:var(--ink)}
+.bp-hint{font-size:14px;color:var(--faint);margin:6px 0 0}
+@media (max-width:1200px){.bp-hint::after{content:" — kéo ngang để xem hết"}}
+.bp-note{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0 0;font-size:14px;color:var(--dim)}
+.bp-note span{display:flex;align-items:center;gap:7px}
+.bp-key{width:15px;height:15px;border-radius:3px;border:1.5px solid;flex:none}
+
+/* ---------- lệnh ---------- */
+pre{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:14px 16px;
+    overflow-x:auto;font-family:var(--mono);font-size:14px;line-height:1.65;margin:16px 0}
+pre .cm{color:var(--faint)}
+ul.plain{padding-left:22px;margin:0 0 15px}
+ul.plain li{margin-bottom:7px}
+footer{margin-top:64px;padding-top:22px;border-top:1px solid var(--line);
+       color:var(--faint);font-size:15px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+#doNen{position:fixed;top:14px;right:14px;z-index:99;display:flex;align-items:center;gap:7px;
+  font-family:var(--ui);font-size:13px;font-weight:600;color:var(--dim);
+  background:var(--card);border:1px solid var(--line2);border-radius:999px;
+  padding:7px 13px;cursor:pointer;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+#doNen:hover{color:var(--ink);border-color:var(--ink)}
+#doNen:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+#doNen svg{width:14px;height:14px;flex:none}
+@media print{#doNen{display:none}}
+</style>
+
+<div class="page">
+
+<header>
+  <p class="kicker">DSM AllForWood · tài liệu vận hành · 12/08/2026</p>
+  <h1>Pipeline xử lý đơn</h1>
+  <p class="sub">Từ mail báo đơn của Rithum tới hoá đơn gửi Home Depot. Chín bước, hai luồng, và năm chỗ không hoàn tác được.</p>
+</header>
+
+<h2>Toàn cảnh</h2>
+<p class="intro">Một đơn đi qua ba khối: <strong>đưa vào</strong> (đơn và packing slip về hệ thống), <strong>xử lý</strong> (chia luồng rồi làm giấy tờ hoặc nhãn), <strong>đóng sổ</strong> (số vận đơn về, xuất hoá đơn).</p>
+
+<figure>
+<svg viewBox="0 0 620 356" role="img" aria-label="Sơ đồ toàn cảnh: đơn về sheet, tải packing slip, phân loại; từ phân loại tách thành hai nhánh song song B2B và B2C; cả hai cùng đổ về sheet và Drive, rồi tới bước lấy số vận đơn và xuất hoá đơn">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g font-family="system-ui, sans-serif" font-size="14" fill="currentColor">
+
+    <rect x="18" y="14" width="152" height="54" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="94" y="37" text-anchor="middle" font-weight="600">Đơn về sheet</text>
+    <text x="94" y="56" text-anchor="middle" font-size="12.5" opacity=".7">mail Rithum · 10 phút</text>
+
+    <rect x="234" y="14" width="152" height="54" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="310" y="37" text-anchor="middle" font-weight="600">Tải packing slip</text>
+    <text x="310" y="56" text-anchor="middle" font-size="12.5" opacity=".7">DSM · 5 phút</text>
+
+    <rect x="450" y="14" width="152" height="54" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="526" y="37" text-anchor="middle" font-weight="600">Phân loại</text>
+    <text x="526" y="56" text-anchor="middle" font-size="12.5" opacity=".7">theo kho lấy hàng</text>
+
+    <line x1="170" y1="41" x2="228" y2="41" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+    <line x1="386" y1="41" x2="444" y2="41" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+
+    <path d="M 526 68 L 526 92 L 160 92 L 160 122" fill="none" style="stroke:var(--b2b)" stroke-width="1.8" marker-end="url(#ar)"/>
+    <path d="M 526 68 L 526 92 L 440 92 L 440 122" fill="none" style="stroke:var(--b2c)" stroke-width="1.8" marker-end="url(#ar)"/>
+
+    <rect x="60" y="128" width="200" height="60" rx="6" style="fill:var(--b2b-bg);stroke:var(--b2b)" stroke-width="1.5"/>
+    <text x="160" y="152" text-anchor="middle" font-weight="600" style="fill:var(--b2b)">B2B · kho Calhoun</text>
+    <text x="160" y="172" text-anchor="middle" font-size="12.5" style="fill:var(--b2b)" opacity=".85">dựng BOL · hàng pallet</text>
+
+    <rect x="340" y="128" width="200" height="60" rx="6" style="fill:var(--b2c-bg);stroke:var(--b2c)" stroke-width="1.5"/>
+    <text x="440" y="152" text-anchor="middle" font-weight="600" style="fill:var(--b2c)">B2C · kho Lecangs</text>
+    <text x="440" y="172" text-anchor="middle" font-size="12.5" style="fill:var(--b2c)" opacity=".85">nhãn UPS · hàng kiện</text>
+
+    <path d="M 160 188 L 160 212 L 300 212 L 300 236" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+    <path d="M 440 188 L 440 212 L 300 212 L 300 236" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+
+    <rect x="200" y="242" width="200" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="300" y="270" text-anchor="middle" font-weight="600">Sheet + Drive</text>
+
+    <line x1="300" y1="286" x2="300" y2="306" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+
+    <rect x="160" y="312" width="280" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="300" y="338" text-anchor="middle" font-weight="600">Số vận đơn về → hoá đơn</text>
+  </g>
+</svg>
+<figcaption><b>Điểm rẽ nằm ở bước 3.</b> Mọi thứ trước đó chung một đường; sau đó hai luồng làm hai loại giấy tờ khác hẳn nhau, rồi hợp lại khi xuất hoá đơn.</figcaption>
+</figure>
+
+<h2>Bản đồ đầy đủ</h2>
+<p class="intro">Từng bước một, không bỏ sót. Luồng chạy <strong>một chiều từ trên xuống</strong> qua bốn giai đoạn; đến chỗ phân loại thì rẽ ba nhánh chạy song song rồi chụm lại. Hình dài — cuộn xuống để đi hết.</p>
+
+<div class="blueprint">
+<svg viewBox="0 0 1080 2506" role="img" aria-label="Flowchart dọc chi tiết toàn bộ pipeline xử lý đơn, từ mail báo đơn tới hoá đơn, gồm bốn giai đoạn và ba nhánh song song">
+  <defs>
+    <marker id="f-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/></marker>
+    <marker id="f-stop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--stop)"/></marker>
+    <marker id="f-b2b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--b2b)"/></marker>
+    <marker id="f-b2c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--b2c)"/></marker>
+  </defs>
+  <g font-family="system-ui, sans-serif" fill="currentColor">
+    <text x="22" y="18" font-size="12.5" font-weight="700" letter-spacing="1.3" opacity=".5">ĐƠN VÀ PACKING SLIP VỀ HỆ THỐNG</text>
+    <text x="22" y="936" font-size="12.5" font-weight="700" letter-spacing="1.3" opacity=".5">ĐỌC SLIP VÀ PHÂN LOẠI</text>
+    <text x="22" y="1274" font-size="12.5" font-weight="700" letter-spacing="1.3" opacity=".5">BA NHÁNH</text>
+    <text x="22" y="2048" font-size="12.5" font-weight="700" letter-spacing="1.3" opacity=".5">ĐÓNG SỔ</text>
+    <path d="M 540 1256 L 540 1290" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".75"/>
+    <path d="M 175 1290 L 905 1290" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".75"/>
+    <path d="M 175 1290 L 175 1293" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".75"/>
+    <path d="M 540 1290 L 540 1293" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".75"/>
+    <path d="M 905 1290 L 905 1293" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".75"/>
+    <path d="M 175 1770 L 175 2054" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".75"/>
+    <path d="M 540 2016 L 540 2054" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".75"/>
+    <path d="M 905 1688 L 905 2054" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".75"/>
+    <path d="M 175 2054 L 905 2054" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".75"/>
+    <path d="M 540 2054 L 540 2067" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".75"/>
+    <path d="M 540.0 92 L 540.0 116" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 174 L 540.0 198" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 256 L 540.0 280" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 338 L 540.0 362" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 420 L 540.0 444" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 502 L 540.0 526" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 584 L 540.0 608" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 666 L 540.0 690" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 748 L 540.0 772" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 830 L 540.0 854" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 1010 L 540.0 1034" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 1092 L 540.0 1116" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 1174 L 540.0 1198" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 674.0 1145.0 L 771.0 1145.0" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 175.0 1360 L 175.0 1384" fill="none" stroke="currentColor" style="stroke:var(--b2b)" stroke-width="1.7" marker-end="url(#f-b2b)" opacity=".8"/>
+    <path d="M 175.0 1442 L 175.0 1466" fill="none" stroke="currentColor" style="stroke:var(--b2b)" stroke-width="1.7" marker-end="url(#f-b2b)" opacity=".8"/>
+    <path d="M 175.0 1524 L 175.0 1548" fill="none" stroke="currentColor" style="stroke:var(--b2b)" stroke-width="1.7" marker-end="url(#f-b2b)" opacity=".8"/>
+    <path d="M 175.0 1606 L 175.0 1630" fill="none" stroke="currentColor" style="stroke:var(--b2b)" stroke-width="1.7" marker-end="url(#f-b2b)" opacity=".8"/>
+    <path d="M 175.0 1688 L 175.0 1712" fill="none" stroke="currentColor" style="stroke:var(--b2b)" stroke-width="1.7" marker-end="url(#f-b2b)" opacity=".8"/>
+    <path d="M 540.0 1360 L 540.0 1384" fill="none" stroke="currentColor" style="stroke:var(--b2c)" stroke-width="1.7" marker-end="url(#f-b2c)" opacity=".8"/>
+    <path d="M 540.0 1442 L 540.0 1466" fill="none" stroke="currentColor" style="stroke:var(--b2c)" stroke-width="1.7" marker-end="url(#f-b2c)" opacity=".8"/>
+    <path d="M 540.0 1524 L 540.0 1548" fill="none" stroke="currentColor" style="stroke:var(--b2c)" stroke-width="1.7" marker-end="url(#f-b2c)" opacity=".8"/>
+    <path d="M 540.0 1606 L 540.0 1630" fill="none" stroke="currentColor" style="stroke:var(--b2c)" stroke-width="1.7" marker-end="url(#f-b2c)" opacity=".8"/>
+    <path d="M 540.0 1688 L 540.0 1712" fill="none" stroke="currentColor" style="stroke:var(--b2c)" stroke-width="1.7" marker-end="url(#f-b2c)" opacity=".8"/>
+    <path d="M 540.0 1770 L 540.0 1794" fill="none" stroke="currentColor" style="stroke:var(--b2c)" stroke-width="1.7" marker-end="url(#f-b2c)" opacity=".8"/>
+    <path d="M 540.0 1852 L 540.0 1876" fill="none" stroke="currentColor" style="stroke:var(--b2c)" stroke-width="1.7" marker-end="url(#f-b2c)" opacity=".8"/>
+    <path d="M 540.0 1934 L 540.0 1958" fill="none" stroke="currentColor" style="stroke:var(--b2c)" stroke-width="1.7" marker-end="url(#f-b2c)" opacity=".8"/>
+    <path d="M 905.0 1360 L 905.0 1384" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 905.0 1442 L 905.0 1466" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 905.0 1524 L 905.0 1548" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 905.0 1606 L 905.0 1630" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 2134 L 540.0 2158" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 2216 L 540.0 2240" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 2298 L 540.0 2322" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540.0 2380 L 540.0 2404" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 674.0 391.0 L 771.0 391.0" fill="none" stroke="currentColor" style="stroke:var(--stop)" stroke-width="1.7" marker-end="url(#f-stop)" opacity=".8"/>
+    <path d="M 674.0 2433.0 L 771.0 2433.0" fill="none" stroke="currentColor" style="stroke:var(--stop)" stroke-width="1.7" marker-end="url(#f-stop)" opacity=".8"/>
+    <path d="M 175 1291 L 175 1302" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540 1291 L 540 1302" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 905 1291 L 905 1302" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <path d="M 540 2065 L 540 2076" fill="none" stroke="currentColor" stroke-width="1.7" marker-end="url(#f-a)" opacity=".8"/>
+    <rect x="406.0" y="34" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="58" text-anchor="middle" font-size="14" font-weight="650">Mail Rithum · New Order Alert</text>
+    <text x="540" y="76" text-anchor="middle" font-size="11.5" opacity=".78">đơn mới từ Home Depot</text>
+    <rect x="406.0" y="116" width="268" height="58" rx="8" style="fill:var(--run-bg);stroke:var(--run)" stroke-width="1.5"/>
+    <text x="540" y="140" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--run)">checkRithumOrders</text>
+    <text x="540" y="158" text-anchor="middle" font-size="11.5" style="fill:var(--run)" opacity=".78">mỗi 10 phút · bóc bảng PO trong mail</text>
+    <rect x="406.0" y="198" width="268" height="58" rx="8" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="540" y="222" text-anchor="middle" font-size="14" font-weight="650">Order List — ghi cột A và B</text>
+    <text x="540" y="240" text-anchor="middle" font-size="11.5" opacity=".78">PO ghi dạng TEXT, giữ số 0 đầu</text>
+    <rect x="406.0" y="280" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="304" text-anchor="middle" font-size="14" font-weight="650">needSlip</text>
+    <text x="540" y="322" text-anchor="middle" font-size="11.5" opacity=".78">lọc PO có cột C và D đều trống</text>
+    <rect x="406.0" y="362" width="268" height="58" rx="8" style="fill:var(--stop-bg);stroke:var(--stop)" stroke-width="1.5"/>
+    <text x="540" y="386" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--stop)">Submit reprint từng PO</text>
+    <text x="540" y="404" text-anchor="middle" font-size="11.5" style="fill:var(--stop)" opacity=".78">nghỉ 1,5s giữa các PO · KHÔNG hoàn tác</text>
+    <rect x="406.0" y="444" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="468" text-anchor="middle" font-size="14" font-weight="650">doiDuSlip</text>
+    <text x="540" y="486" text-anchor="middle" font-size="11.5" opacity=".78">đợi DSM sinh file, tối đa 60 giây</text>
+    <rect x="406.0" y="526" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="550" text-anchor="middle" font-size="14" font-weight="650">pendingFiles</text>
+    <text x="540" y="568" text-anchor="middle" font-size="11.5" opacity=".78">lấy TẤT CẢ file chờ, không chỉ file đầu</text>
+    <rect x="406.0" y="608" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="632" text-anchor="middle" font-size="14" font-weight="650">downloadFile.do</text>
+    <text x="540" y="650" text-anchor="middle" font-size="11.5" opacity=".78">kiểm 5 byte đầu là %PDF, bỏ isLive</text>
+    <rect x="406.0" y="690" width="268" height="58" rx="8" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="540" y="725" text-anchor="middle" font-size="14" font-weight="650">Upload file gộp lên Drive _INBOX</text>
+    <rect x="406.0" y="772" width="268" height="58" rx="8" style="fill:var(--stop-bg);stroke:var(--stop)" stroke-width="1.5"/>
+    <text x="540" y="796" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--stop)">Ghi manifest</text>
+    <text x="540" y="814" text-anchor="middle" font-size="11.5" style="fill:var(--stop)" opacity=".78">bằng chứng: PO này đã lấy slip</text>
+    <rect x="406.0" y="854" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="878" text-anchor="middle" font-size="14" font-weight="650">tachTheoPO</text>
+    <text x="540" y="896" text-anchor="middle" font-size="11.5" opacity=".78">cắt file gộp thành từng slip một trang</text>
+    <rect x="406.0" y="952" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="976" text-anchor="middle" font-size="14" font-weight="650">docSlip</text>
+    <text x="540" y="994" text-anchor="middle" font-size="11.5" opacity=".78">đọc PDF xoay 90° · lấy MỌI dòng hàng</text>
+    <rect x="406.0" y="1034" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="1058" text-anchor="middle" font-size="14" font-weight="650">kiemQty</text>
+    <text x="540" y="1076" text-anchor="middle" font-size="11.5" opacity=".78">đối chiếu số lượng slip với DSM ghi nhận</text>
+    <rect x="406.0" y="1116" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="1140" text-anchor="middle" font-size="14" font-weight="650">Tra tồn kho Lecangs</text>
+    <text x="540" y="1158" text-anchor="middle" font-size="11.5" opacity=".78">chỉ SKU nhóm ưu tiên B2C · bỏ hậu tố</text>
+    <rect x="406.0" y="1198" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="1222" text-anchor="middle" font-size="14" font-weight="650">phanLoaiSku — từng dòng hàng</text>
+    <text x="540" y="1240" text-anchor="middle" font-size="11.5" opacity=".78">kho Calhoun → B2B · kho Lecangs → B2C</text>
+    <rect x="41.0" y="1302" width="268" height="58" rx="8" style="fill:var(--b2b-bg);stroke:var(--b2b)" stroke-width="1.5"/>
+    <text x="175" y="1326" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--b2b)">Nhánh B2B · hàng pallet</text>
+    <text x="175" y="1344" text-anchor="middle" font-size="11.5" style="fill:var(--b2b)" opacity=".78">kho Calhoun</text>
+    <rect x="41.0" y="1384" width="268" height="58" rx="8" style="fill:var(--b2b-bg);stroke:var(--b2b)" stroke-width="1.5"/>
+    <text x="175" y="1408" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--b2b)">tinhBOL</text>
+    <text x="175" y="1426" text-anchor="middle" font-size="11.5" style="fill:var(--b2b)" opacity=".78">weight = Σ(cân × qty) + 55 · freight class</text>
+    <rect x="41.0" y="1466" width="268" height="58" rx="8" style="fill:var(--b2b-bg);stroke:var(--b2b)" stroke-width="1.5"/>
+    <text x="175" y="1490" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--b2b)">bol_html.py</text>
+    <text x="175" y="1508" text-anchor="middle" font-size="11.5" style="fill:var(--b2b)" opacity=".78">ô hãng vận chuyển để TRỐNG</text>
+    <rect x="41.0" y="1548" width="268" height="58" rx="8" style="fill:var(--b2b-bg);stroke:var(--b2b)" stroke-width="1.5"/>
+    <text x="175" y="1572" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--b2b)">makeFolder</text>
+    <text x="175" y="1590" text-anchor="middle" font-size="11.5" style="fill:var(--b2b)" opacity=".78">chốt ngày pickup · trần 20 đơn/ngày</text>
+    <rect x="41.0" y="1630" width="268" height="58" rx="8" style="fill:var(--b2b-bg);stroke:var(--b2b)" stroke-width="1.5"/>
+    <text x="175" y="1665" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--b2b)">Upload BOL + slip lên Drive</text>
+    <rect x="41.0" y="1712" width="268" height="58" rx="8" style="fill:var(--b2b-bg);stroke:var(--b2b)" stroke-width="1.5"/>
+    <text x="175" y="1736" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--b2b)">fillRow</text>
+    <text x="175" y="1754" text-anchor="middle" font-size="11.5" style="fill:var(--b2b)" opacity=".78">skipCap dùng lại đúng ngày vừa chốt</text>
+    <rect x="406.0" y="1302" width="268" height="58" rx="8" style="fill:var(--b2c-bg);stroke:var(--b2c)" stroke-width="1.5"/>
+    <text x="540" y="1326" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--b2c)">Nhánh B2C · hàng kiện</text>
+    <text x="540" y="1344" text-anchor="middle" font-size="11.5" style="fill:var(--b2c)" opacity=".78">kho Lecangs</text>
+    <rect x="406.0" y="1384" width="268" height="58" rx="8" style="fill:var(--b2c-bg);stroke:var(--b2c)" stroke-width="1.5"/>
+    <text x="540" y="1408" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--b2c)">chonKho</text>
+    <text x="540" y="1426" text-anchor="middle" font-size="11.5" style="fill:var(--b2c)" opacity=".78">kho gần nhất còn ĐỦ hàng cho mọi SKU</text>
+    <rect x="406.0" y="1466" width="268" height="58" rx="8" style="fill:var(--b2c-bg);stroke:var(--b2c)" stroke-width="1.5"/>
+    <text x="540" y="1490" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--b2c)">traDims</text>
+    <text x="540" y="1508" text-anchor="middle" font-size="11.5" style="fill:var(--b2c)" opacity=".78">kích thước theo SKU · GIỮ hậu tố</text>
+    <rect x="406.0" y="1548" width="268" height="58" rx="8" style="fill:var(--stop-bg);stroke:var(--stop)" stroke-width="1.5"/>
+    <text x="540" y="1572" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--stop)">UPS API — taoShipment</text>
+    <text x="540" y="1590" text-anchor="middle" font-size="11.5" style="fill:var(--stop)" opacity=".78">vận đơn thật · nhãn 4×6 · KHÔNG hoàn tác</text>
+    <rect x="406.0" y="1630" width="268" height="58" rx="8" style="fill:var(--stop-bg);stroke:var(--stop)" stroke-width="1.5"/>
+    <text x="540" y="1654" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--stop)">Ghi ups/<PO>.json NGAY</text>
+    <text x="540" y="1672" text-anchor="middle" font-size="11.5" style="fill:var(--stop)" opacity=".78">trước mọi bước khác</text>
+    <rect x="406.0" y="1712" width="268" height="58" rx="8" style="fill:var(--b2c-bg);stroke:var(--b2c)" stroke-width="1.5"/>
+    <text x="540" y="1736" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--b2c)">Upload nhãn lên Drive + fillRow</text>
+    <text x="540" y="1754" text-anchor="middle" font-size="11.5" style="fill:var(--b2c)" opacity=".78">tracking vào cột N</text>
+    <rect x="406.0" y="1794" width="268" height="58" rx="8" style="fill:var(--b2c-bg);stroke:var(--b2c)" stroke-width="1.5"/>
+    <text x="540" y="1818" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--b2c)">Lecangs — điền form 16 ô</text>
+    <text x="540" y="1836" text-anchor="middle" font-size="11.5" style="fill:var(--b2c)" opacity=".78">kho, địa chỉ, carrier, tracking, upload nhãn</text>
+    <rect x="406.0" y="1876" width="268" height="58" rx="8" style="fill:var(--stop-bg);stroke:var(--stop)" stroke-width="1.5"/>
+    <text x="540" y="1900" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--stop)">Save & Submit</text>
+    <text x="540" y="1918" text-anchor="middle" font-size="11.5" style="fill:var(--stop)" opacity=".78">lệnh xuất kho thật · KHÔNG hoàn tác</text>
+    <rect x="406.0" y="1958" width="268" height="58" rx="8" style="fill:var(--stop-bg);stroke:var(--stop)" stroke-width="1.5"/>
+    <text x="540" y="1993" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--stop)">Ghi lecangs/<PO>_<tracking>.json</text>
+    <rect x="771.0" y="1302" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="905" y="1326" text-anchor="middle" font-size="14" font-weight="650">Đơn hỗn hợp</text>
+    <text x="905" y="1344" text-anchor="middle" font-size="11.5" opacity=".78">có cả SKU B2B lẫn SKU B2C</text>
+    <rect x="771.0" y="1384" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="905" y="1408" text-anchor="middle" font-size="14" font-weight="650">danhDauB2B_B2C</text>
+    <text x="905" y="1426" text-anchor="middle" font-size="11.5" opacity=".78">đánh X cột T rồi DỪNG, không xử lý</text>
+    <rect x="771.0" y="1466" width="268" height="58" rx="8" style="fill:var(--run-bg);stroke:var(--run)" stroke-width="1.5"/>
+    <text x="905" y="1490" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--run)">copyB2B_B2C</text>
+    <text x="905" y="1508" text-anchor="middle" font-size="11.5" style="fill:var(--run)" opacity=".78">mỗi 15 phút · chỉ chép A, B, T</text>
+    <rect x="771.0" y="1548" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="905" y="1572" text-anchor="middle" font-size="14" font-weight="650">--sheet b2b · --sheet b2c</text>
+    <text x="905" y="1590" text-anchor="middle" font-size="11.5" opacity=".78">hai tool con, mỗi tool làm nửa của mình</text>
+    <rect x="771.0" y="1630" width="268" height="58" rx="8" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="905" y="1654" text-anchor="middle" font-size="14" font-weight="650">Ghi thẳng vào sheet con</text>
+    <text x="905" y="1672" text-anchor="middle" font-size="11.5" opacity=".78">không qua Order List</text>
+    <rect x="406.0" y="2076" width="268" height="58" rx="8" style="fill:var(--run-bg);stroke:var(--run)" stroke-width="1.5"/>
+    <text x="540" y="2100" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--run)">Số PRO và tracking về cột N</text>
+    <text x="540" y="2118" text-anchor="middle" font-size="11.5" style="fill:var(--run)" opacity=".78">fillPro · checkMarioPro · mỗi 15 phút</text>
+    <rect x="406.0" y="2158" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="2182" text-anchor="middle" font-size="14" font-weight="650">invoice.mjs — Auto Fill</text>
+    <text x="540" y="2200" text-anchor="middle" font-size="11.5" opacity=".78">tự tích ô chọn + sinh số hoá đơn</text>
+    <rect x="406.0" y="2240" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="2264" text-anchor="middle" font-size="14" font-weight="650">Điền Terms Net Days = 2</text>
+    <text x="540" y="2282" text-anchor="middle" font-size="11.5" opacity=".78">và Invoice Quantity = Quantity Remaining</text>
+    <rect x="406.0" y="2322" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="540" y="2346" text-anchor="middle" font-size="14" font-weight="650">Đọc lại toàn bộ, đối chiếu từng ô</text>
+    <text x="540" y="2364" text-anchor="middle" font-size="11.5" opacity=".78">lệch một ô là DỪNG, không gửi</text>
+    <rect x="406.0" y="2404" width="268" height="58" rx="8" style="fill:var(--stop-bg);stroke:var(--stop)" stroke-width="1.5"/>
+    <text x="540" y="2428" text-anchor="middle" font-size="14" font-weight="650" style="fill:var(--stop)">Submit — gửi hoá đơn</text>
+    <text x="540" y="2446" text-anchor="middle" font-size="11.5" style="fill:var(--stop)" opacity=".78">KHÔNG SỬA ĐƯỢC sau khi gửi</text>
+    <rect x="771.0" y="362" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="905" y="386" text-anchor="middle" font-size="14" font-weight="650">DSM CommerceHub</text>
+    <text x="905" y="404" text-anchor="middle" font-size="11.5" opacity=".78">đặt lệnh, tải file</text>
+    <rect x="771.0" y="1116" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="905" y="1140" text-anchor="middle" font-size="14" font-weight="650">Lecangs</text>
+    <text x="905" y="1158" text-anchor="middle" font-size="11.5" opacity=".78">tra tồn kho</text>
+    <rect x="771.0" y="2404" width="268" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="905" y="2428" text-anchor="middle" font-size="14" font-weight="650">DSM — Needs Invoicing</text>
+    <text x="905" y="2446" text-anchor="middle" font-size="11.5" opacity=".78">hoá đơn đã gửi</text>
+  </g>
+</svg>
+</div>
+<div class="bp-note">
+  <span><i class="bp-key" style="background:#FEECEB;border-color:#B91C1C"></i> không hoàn tác được</span>
+  <span><i class="bp-key" style="background:#FEF3E2;border-color:#B45309"></i> nhánh B2B</span>
+  <span><i class="bp-key" style="background:#E6F4F1;border-color:#0F766E"></i> nhánh B2C</span>
+  <span><i class="bp-key" style="background:#EFF4E4;border-color:#3F6212"></i> chạy tự động</span>
+  <span><i class="bp-key" style="background:transparent;border-color:currentColor"></i> bước thường</span>
+</div>
+<p style="font-size:15px;color:var(--dim);margin-top:14px"><b style="color:var(--ink)">Bốn ô đỏ là toàn bộ rủi ro của hệ thống.</b> Mọi bước khác đều làm lại được: xoá file, sửa dòng sheet, chạy lại lượt sau. Bốn bước đó thì không — nên mỗi cái đều ghi một tệp bằng chứng ra đĩa ngay khi vừa xong, trước mọi việc khác. Đó là thứ duy nhất ngăn lượt chạy kế tiếp làm lại việc đã làm; danh sách đầy đủ ở bảng cuối trang.</p>
+
+<h2>Chín bước, chi tiết</h2>
+
+<ol class="flow">
+
+<li>
+  <h4>Đơn về sheet</h4>
+  <p>Rithum gửi mail <code>Rithum New Order Alert</code>. Hàm đọc mail, bóc bảng PO trong thân thư, ghi <strong>ngày vào cột A và số PO vào cột B</strong>.</p>
+  <p class="who">checkRithumOrders · mỗi 10 phút · chạy trên server Google</p>
+</li>
+
+<li class="stop">
+  <h4>Tải packing slip</h4>
+  <p>Hỏi sheet xem PO nào chưa ai đụng, lên DSM đặt lệnh in lại slip cho từng PO, đợi DSM sinh file, tải về rồi cắt thành từng slip riêng.</p>
+  <p><strong>Lệnh in lại đã gửi là không rút được.</strong> Nếu bước tải hỏng giữa chừng, lượt sau sẽ đặt lệnh trùng — nên ngay sau khi tải xong, hệ thống ghi một tệp đánh dấu trên Drive để lượt sau biết mà bỏ qua.</p>
+  <p class="who">run.mjs · mỗi 5 phút, cả ngày</p>
+</li>
+
+<li>
+  <h4>Phân loại từng dòng hàng</h4>
+  <p>Xét <strong>từng SKU</strong>, không phải cả đơn, và xét theo <strong>kho lấy hàng</strong> chứ không theo hãng vận chuyển. Chi tiết ở phần tiếp theo.</p>
+  <p class="who">nơi duy nhất giữ luật này: phanLoaiSku()</p>
+</li>
+
+<li class="b2b">
+  <h4>Nhánh B2B — dựng BOL</h4>
+  <p>Tính cân nặng và freight class, dựng file BOL, tạo thư mục Drive theo ngày, điền sheet. Không gọi hãng nào, không tốn tiền — sai thì xoá file và sửa lại.</p>
+  <p class="who">xu-ly-don.mjs · chạy trong cron cùng bước 2</p>
+</li>
+
+<li class="b2c">
+  <h4>Nhánh B2C — nhãn UPS</h4>
+  <p>Tra tồn kho Lecangs, chọn kho gần nhất còn đủ hàng, gọi UPS tạo vận đơn, lấy nhãn khổ 4×6, rồi tạo lệnh xuất kho bên Lecangs.</p>
+  <p><strong>Tạo vận đơn và lệnh xuất kho đều là thật.</strong> Cả hai được ghi bằng chứng ra đĩa ngay khi vừa tạo xong.</p>
+  <p class="who">xu-ly-ground.mjs · chạy tay, chưa vào cron</p>
+</li>
+
+<li>
+  <h4>Đơn hỗn hợp — chia đôi</h4>
+  <p>Đơn có cả SKU B2B lẫn SKU B2C thì không tool nào xử lý trọn. Tool chính chỉ <strong>đánh dấu X vào cột T</strong> rồi dừng; hai tool con mỗi cái làm nửa của mình.</p>
+</li>
+
+<li>
+  <h4>Đồng bộ sang sheet B2B và B2C</h4>
+  <p>Quét 40 đơn cuối của sheet chính rồi chép sang hai sheet con. Mức chép khác nhau tuỳ đơn — xem bảng bên dưới.</p>
+  <p class="who">copyB2B_B2C · mỗi 15 phút</p>
+</li>
+
+<li>
+  <h4>Số vận đơn về</h4>
+  <p>Đơn UPS có số ngay lúc tạo nhãn. Đơn LTL thì số PRO về sau, bằng hai đường khác nhau tuỳ hãng.</p>
+  <p class="who">fillPro và checkMarioPro · mỗi 15 phút</p>
+</li>
+
+<li class="stop">
+  <h4>Xuất hoá đơn</h4>
+  <p>Trang <em>Needs Invoicing</em> của DSM liệt kê đơn đã giao xong. Tool điền số hoá đơn, kỳ hạn thanh toán và số lượng cho từng dòng, rồi gửi cả trang một lần.</p>
+  <p><strong>Trang ghi rõ: gửi rồi không sửa được.</strong></p>
+  <p class="who">invoice.mjs · chạy tay</p>
+</li>
+
+</ol>
+
+<h2>Luật phân loại B2B / B2C</h2>
+<p class="intro">Đây là chỗ quyết định mọi thứ phía sau, và cũng là chỗ dễ nhầm nhất.</p>
+
+<figure>
+<svg viewBox="0 0 700 404" role="img" aria-label="Cây quyết định phân loại: đơn đi Alaska hoặc Hawaii về B2B ngay; SKU kho Calhoun về B2B; SKU 838250 và 818250 tra tồn kho, còn hàng thì B2C, hết hàng thì B2B; SKU còn lại theo Ship Via trên slip">
+  <defs>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g font-family="system-ui, sans-serif" font-size="14" fill="currentColor">
+
+    <rect x="180" y="8" width="250" height="38" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="305" y="32" text-anchor="middle" font-weight="600">Một dòng hàng trên slip</text>
+    <line x1="305" y1="46" x2="305" y2="66" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+    <rect x="150" y="72" width="310" height="42" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="305" y="90" text-anchor="middle" font-weight="600">Bang giao là AK hoặc HI?</text>
+    <text x="305" y="107" text-anchor="middle" font-size="11.5" opacity=".65">Alaska · Hawaii — xét trước mọi luật khác</text>
+
+    <line x1="460" y1="93" x2="536" y2="93" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <text x="498" y="86" text-anchor="middle" font-size="12.5" opacity=".7">có</text>
+    <rect x="542" y="74" width="150" height="38" rx="6" style="fill:var(--b2b-bg);stroke:var(--b2b)" stroke-width="1.5"/>
+    <text x="617" y="98" text-anchor="middle" font-weight="600" style="fill:var(--b2b)">B2B</text>
+
+    <line x1="305" y1="114" x2="305" y2="134" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <text x="322" y="130" font-size="12.5" opacity=".7">không</text>
+
+    <rect x="150" y="140" width="310" height="42" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="305" y="158" text-anchor="middle" font-weight="600">SKU thuộc nhóm kho Calhoun?</text>
+    <text x="305" y="175" text-anchor="middle" font-size="11.5" opacity=".65" font-family="ui-monospace, monospace">836390 · 836390-B · 838390 · 838390-B</text>
+
+    <line x1="460" y1="161" x2="536" y2="161" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <text x="498" y="154" text-anchor="middle" font-size="12.5" opacity=".7">có</text>
+    <rect x="542" y="142" width="150" height="38" rx="6" style="fill:var(--b2b-bg);stroke:var(--b2b)" stroke-width="1.5"/>
+    <text x="617" y="166" text-anchor="middle" font-weight="600" style="fill:var(--b2b)">B2B</text>
+
+    <line x1="305" y1="182" x2="305" y2="202" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <text x="322" y="198" font-size="12.5" opacity=".7">không</text>
+
+    <rect x="150" y="208" width="310" height="42" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="305" y="226" text-anchor="middle" font-weight="600">SKU thuộc nhóm ưu tiên B2C?</text>
+    <text x="305" y="243" text-anchor="middle" font-size="11.5" opacity=".65" font-family="ui-monospace, monospace">838250 · 838250-B · 818250 · 818250-B</text>
+
+    <line x1="460" y1="229" x2="536" y2="229" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <text x="498" y="222" text-anchor="middle" font-size="12.5" opacity=".7">có</text>
+    <rect x="542" y="210" width="150" height="38" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="617" y="234" text-anchor="middle" font-weight="600">Tra tồn kho</text>
+
+    <path d="M 617 248 L 617 282" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <rect x="500" y="288" width="192" height="34" rx="6" style="fill:var(--b2c-bg);stroke:var(--b2c)" stroke-width="1.5"/>
+    <text x="596" y="310" text-anchor="middle" font-size="13" font-weight="600" style="fill:var(--b2c)">còn đủ → B2C</text>
+    <rect x="500" y="328" width="192" height="34" rx="6" style="fill:var(--b2b-bg);stroke:var(--b2b)" stroke-width="1.5"/>
+    <text x="596" y="350" text-anchor="middle" font-size="13" font-weight="600" style="fill:var(--b2b)">hết hàng → B2B</text>
+    <rect x="500" y="368" width="192" height="34" rx="6" style="fill:var(--b2c-bg);stroke:var(--b2c)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="596" y="390" text-anchor="middle" font-size="13" font-weight="600" style="fill:var(--b2c)">chưa tra được → B2C</text>
+
+    <line x1="305" y1="250" x2="305" y2="272" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <text x="322" y="267" font-size="12.5" opacity=".7">không</text>
+
+    <rect x="150" y="278" width="310" height="38" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="305" y="302" text-anchor="middle" font-weight="600">Ship Via trên slip ghi gì?</text>
+
+    <path d="M 220 316 L 220 348" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <text x="180" y="338" font-size="12.5" opacity=".7">Ground</text>
+    <rect x="146" y="354" width="150" height="36" rx="6" style="fill:var(--b2c-bg);stroke:var(--b2c)" stroke-width="1.5"/>
+    <text x="221" y="377" text-anchor="middle" font-weight="600" style="fill:var(--b2c)">B2C</text>
+
+    <path d="M 390 316 L 390 348" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <text x="400" y="338" font-size="12.5" opacity=".7">Misc</text>
+    <rect x="316" y="354" width="150" height="36" rx="6" style="fill:var(--b2b-bg);stroke:var(--b2b)" stroke-width="1.5"/>
+    <text x="391" y="377" text-anchor="middle" font-weight="600" style="fill:var(--b2b)">B2B</text>
+  </g>
+</svg>
+<figcaption><b>Luật bang thắng tất cả, luật SKU thắng Ship Via.</b> Đơn giao tới <code>AK</code>/<code>HI</code> về B2B ngay, không xét SKU — vì <code>warehouse_ranking_by_state.csv</code> và <code>carrier.csv</code> đều chỉ có 48 bang lục địa, nhánh Ground sẽ ném lỗi ở <code>khoUuTien()</code>. Bốn chuỗi kho Calhoun về B2B ngay cả khi slip ghi <code>Ground</code>. Đây là chỗ dễ nhầm vì hàng ở Calhoun vẫn đi UPS — mà "đi UPS" ở chỗ khác lại là dấu hiệu của B2C. Cả hai danh sách khớp <b>tuyệt đối cả chuỗi</b>, nên mỗi biến thể hậu tố phải có tên riêng.</figcaption>
+</figure>
+
+<div class="box b2b">
+  <p class="t">Luật 0 — AK/HI, thêm 12/08/2026</p>
+  <p><code>BANG_LUON_B2B = {'AK','HI'}</code> xét <strong>trước</strong> cả ba luật SKU, đọc từ <code>shipTo.bang</code> của slip. Đơn Misc đi hai bang này vốn đã chạy được (carrier <code>NULL</code>, vẫn dựng BOL); luật mới là để đơn <strong>Ground</strong> đi AK/HI không còn kẹt vô thời hạn.</p>
+  <p>Đơn Ground về B2B hiện <strong>chỉ điền sheet, không dựng BOL</strong> — theo quyết định "hàng Ground về B2B thì trước mắt chỉ điền sheet". Nếu muốn dựng BOL cho nhóm này thì phải đổi nhánh <code>chiDienSheet</code>.</p>
+</div>
+
+<div class="box b2c">
+  <p class="t">Hệ quả: phân loại phụ thuộc tồn kho</p>
+  <p>Đơn chứa <code>838250</code> hoặc <code>818250</code> <strong>phải tra Lecangs xong mới biết thuộc luồng nào</strong>. Phiên Lecangs sống khoảng bốn tiếng và phải xin cookie thủ công, nên phần lớn thời gian trong ngày những đơn này rơi về mặc định B2C.</p>
+  <p>Kết quả cũng đổi theo lúc chạy: sáng còn hàng thì B2C, chiều hết hàng thì B2B. Đơn nào đã tạo nhãn UPS rồi thì bị <strong>khoá ở B2C</strong>, để nhãn đã in không bị đơn nhảy sheet.</p>
+</div>
+
+<h3>Ba cách khớp mã SKU, đừng lẫn</h3>
+<div class="tw">
+<table>
+<thead><tr><th>Dùng ở đâu</th><th>Cách khớp</th><th>Ví dụ</th></tr></thead>
+<tbody>
+<tr><td>Phân loại B2B / B2C</td><td><strong>khớp tuyệt đối cả chuỗi</strong></td><td><code>836390-B</code> và <code>836390</code> là hai dòng riêng trong danh sách</td></tr>
+<tr><td>Tra tồn kho Lecangs</td><td>bỏ <strong>mọi hậu tố</strong>, gộp các biến thể</td><td><code>838250-B</code> tra bằng <code>838250</code>, gộp cả <code>-WL</code></td></tr>
+<tr><td>Tra kích thước và cân nặng</td><td><strong>giữ nguyên</strong> hậu tố</td><td><code>812250</code> nặng 31 lb · <code>812250-B</code> nặng 128 lb</td></tr>
+</tbody>
+</table>
+</div>
+<p>Ba dòng trên là ba luật khác nhau cho cùng một mã hàng, và đây là nguồn nhầm lẫn thường trực. Dòng cuối đắt nhất: bỏ hậu tố rồi tra bảng cân nặng là sai hơn <strong>bốn lần</strong>.</p>
+
+<h2>Nhánh B2B — dựng BOL</h2>
+<div class="chips"><span class="chip c-b2b">hàng pallet</span><span class="chip c-run">chạy tự động</span><span class="chip c-off">không tốn tiền</span></div>
+
+<div class="tw">
+<table>
+<thead><tr><th>Ô trên BOL</th><th>Giá trị</th></tr></thead>
+<tbody>
+<tr><td><code># PKGS</code></td><td><strong>tổng số lượng</strong> của mọi dòng hàng</td></tr>
+<tr><td><code>HANDLING UNIT</code></td><td>luôn <code>1</code> — đây là số pallet</td></tr>
+<tr><td><code>WEIGHT</code></td><td>tổng (cân nặng × số lượng), <strong>cộng 55</strong> một lần cho pallet</td></tr>
+<tr><td>Tên hãng vận chuyển</td><td>để <strong>trống</strong> — khâu chọn hãng đang tạm ngưng</td></tr>
+<tr><td>Freight class</td><td>tính theo mật độ, tra bảng <code>class.csv</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Thứ tự ba việc không được đảo: <strong>tạo thư mục Drive trước</strong> (bước này chốt ngày pickup và có thể dời ngày nếu ngày đó đã đủ 20 đơn), rồi upload file, rồi mới điền sheet bằng đúng ngày vừa chốt. Đảo thứ tự thì tên thư mục và cột lịch hẹn xe nói hai ngày khác nhau.</p>
+
+<div class="box b2b">
+  <p class="t">Giới hạn hiện tại</p>
+  <p>Bảng cân nặng cho BOL chỉ có <strong>10 SKU</strong>, trong khi bảng kích thước dùng cho nhánh B2C có <strong>524</strong>. Đơn dùng SKU ngoài 10 mã đó sẽ không tính được cân nặng và nằm chờ người xem.</p>
+</div>
+
+<h2>Nhánh B2C — nhãn UPS và Lecangs</h2>
+<div class="chips"><span class="chip c-b2c">hàng kiện</span><span class="chip c-stop">tạo vận đơn thật</span><span class="chip c-off">chạy tay</span></div>
+
+<ol class="flow">
+<li><h4>Tra tồn kho</h4><p>Hỏi Lecangs từng SKU còn bao nhiêu ở mỗi kho.</p></li>
+<li><h4>Chọn kho</h4><p>Lấy kho <strong>gần nhất còn đủ hàng</strong> theo bảng ưu tiên của bang nhận.</p></li>
+<li class="stop"><h4>Gọi UPS tạo vận đơn</h4><p>Nhận số tracking và nhãn PDF. Ghi bằng chứng ra đĩa <strong>ngay</strong>, trước mọi bước sau.</p></li>
+<li><h4>Lưu Drive và điền sheet</h4><p>Nhãn lên Drive, số tracking vào cột N.</p></li>
+<li class="stop"><h4>Tạo lệnh xuất kho Lecangs</h4><p>Điền form, tải nhãn lên, gửi. Ghi bằng chứng thứ hai.</p></li>
+</ol>
+
+<div class="box">
+  <p class="t">Vì sao phải tra tồn kho thật</p>
+  <p>Đo trên một đơn đi Texas: bảng ưu tiên xếp <code>HOU07</code> đầu tiên, nhưng SKU đó chỉ có ở <strong>CAP</strong> và <strong>NJF02</strong>. Lấy kho gần nhất mà không tra là in nhãn cho một kho không có hàng — và lỗi chỉ lộ ra khi hàng không tới tay khách.</p>
+</div>
+
+<div class="box stop">
+  <p class="t">Nhãn phải đúng khổ 4×6</p>
+  <p>Thiếu khai báo khổ giấy, UPS trả nhãn nằm giữa tờ Letter với nửa trên để trắng. Lecangs chặn bằng một hộp thoại, và nếu không ai bấm qua thì đơn <strong>nằm lại ở trạng thái nháp</strong> — log trông như đã gửi, còn kho không bao giờ thấy đơn.</p>
+</div>
+
+<h2>Đơn hỗn hợp</h2>
+<p class="intro">Đơn có cả SKU B2B lẫn SKU B2C. Một vận đơn UPS chỉ gửi từ một kho, nên không gộp được — mỗi nửa do một tool riêng làm.</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>Ai chạy</th><th>Làm gì</th><th>Ghi vào đâu</th></tr></thead>
+<tbody>
+<tr><td>Tool chính</td><td>nhận ra đơn hỗn hợp, <strong>chỉ đánh dấu X vào cột T</strong></td><td>sheet chính, chỉ ngày + PO + dấu X</td></tr>
+<tr><td>Tool sheet B2B</td><td>làm phần kho Calhoun</td><td>ghi thẳng vào <strong>sheet B2B</strong></td></tr>
+<tr><td>Tool sheet B2C</td><td>làm phần kho Lecangs</td><td>ghi thẳng vào <strong>sheet B2C</strong></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="box">
+  <p class="t">Dấu X phải đặt trước khi ghi dữ liệu</p>
+  <p>Nếu ghi dữ liệu trước rồi việc đánh dấu hỏng, nửa còn lại của đơn <strong>mất dấu hoàn toàn</strong>: không sheet nào biết nó tồn tại, mà log hai bên đều sạch.</p>
+</div>
+
+<h2>Đồng bộ sang hai sheet</h2>
+<p class="intro">Quét 40 đơn cuối của sheet chính, mỗi 15 phút. Mức chép khác nhau tuỳ đơn:</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>Loại đơn</th><th>Sheet đích</th><th>Chép cột nào</th></tr></thead>
+<tbody>
+<tr><td>Có dấu X ở cột T</td><td><strong>cả hai</strong></td><td>chỉ ngày, PO và dấu X — không chạm gì khác</td></tr>
+<tr><td>Hãng ghi <code>UPS</code></td><td>B2C</td><td>toàn bộ 17 cột</td></tr>
+<tr><td>Hãng ghi <code>NULL</code></td><td>B2B</td><td>ngày, PO, link Drive</td></tr>
+<tr><td>Hãng thật khác</td><td>B2B</td><td>toàn bộ trừ hãng, xác nhận Rithum, số PRO, số pickup</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="box">
+  <p class="t">Vì sao phải xét cột T trước cột hãng</p>
+  <p>Đơn hỗn hợp chưa được xử lý nên ô hãng của nó trống, mà luật "ô hãng trống thì chờ lượt sau" sẽ nuốt mất nó vĩnh viễn.</p>
+</div>
+
+<h2>Số vận đơn về bằng ba đường</h2>
+<div class="tw">
+<table>
+<thead><tr><th>Hãng</th><th>Lấy từ đâu</th><th>Nhịp</th></tr></thead>
+<tbody>
+<tr><td>UPS</td><td>API trả về ngay lúc tạo nhãn</td><td>tức thì</td></tr>
+<tr><td>XGSI, BXID</td><td>tra trên web hãng</td><td>15 phút</td></tr>
+<tr><td>SEFL, FXFE, ABFS và các hãng khác</td><td><strong>mail Mario</strong> gửi về hộp thư công ty</td><td>15 phút</td></tr>
+<tr><td>AACT, CTII</td><td>có sẵn ngay lúc tạo BOL, không cần tra</td><td>—</td></tr>
+</tbody>
+</table>
+</div>
+<p>Tất cả đều đổ về <strong>cột N</strong>. Đơn nhiều kiện thì mỗi số một dòng trong cùng một ô.</p>
+
+<h2>Xuất hoá đơn</h2>
+<div class="chips"><span class="chip c-stop">gửi rồi không sửa được</span></div>
+
+<pre><span class="cm"># xem trước — điền hết nhưng không gửi</span>
+node 10_VM_Tool/invoice.mjs --dry
+
+<span class="cm"># gửi thật</span>
+node 10_VM_Tool/invoice.mjs --that</pre>
+
+<p>Với mỗi PO, tool bấm <strong>Auto Fill</strong> (nút này tự tích ô chọn và sinh số hoá đơn cùng lúc), điền kỳ hạn <code>2</code> ngày, rồi đọc cột <em>Quantity Remaining</em> để điền vào <em>Invoice Quantity</em> cho từng dòng hàng.</p>
+
+<div class="box">
+  <p class="t">Lưới chắn trước khi gửi</p>
+  <p>Trước khi bấm Submit, tool <strong>đọc lại toàn bộ</strong> những gì vừa điền và đối chiếu: ô chọn đã tích chưa, số hoá đơn có chưa, kỳ hạn đúng chưa, từng ô số lượng có khớp không. Lệch một ô là dừng, không gửi lô đó.</p>
+  <p>Lần chạy ngày 12/08: <strong>294 PO · 320 dòng hàng · 360 đơn vị</strong>, chia 30 lô, không lô nào bị chặn.</p>
+</div>
+
+<h2>Năm chỗ không hoàn tác được</h2>
+<p class="intro">Mỗi thao tác dưới đây tạo hậu quả thật bên ngoài hệ thống. Cột phải là thứ duy nhất ngăn lượt chạy sau làm lại nó.</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>Thao tác</th><th>Hậu quả</th><th>Dấu vết chống trùng</th></tr></thead>
+<tbody>
+<tr><td>Đặt lệnh in lại slip</td><td>không rút lại được</td><td>tệp đánh dấu trên Drive</td></tr>
+<tr><td>Chốt BOL trên AACT</td><td>sinh số BOL và PRO thật</td><td><code>aact/&lt;PO&gt;.json</code></td></tr>
+<tr><td>Tạo vận đơn UPS</td><td>vận đơn thật, tính cước</td><td><code>ups/&lt;PO&gt;.json</code></td></tr>
+<tr><td>Gửi lệnh xuất kho Lecangs</td><td>kho bắt đầu soạn hàng</td><td><code>lecangs/&lt;PO&gt;_&lt;tracking&gt;.json</code></td></tr>
+<tr><td>Gửi hoá đơn</td><td>hoá đơn đã gửi Home Depot</td><td><code>invoice/lo-&lt;giờ&gt;.json</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="box stop">
+  <p class="t">Nguyên tắc chung</p>
+  <p>Việc không hoàn tác được thì để lại dấu vết <strong>ngay</strong>, trước khi làm bất cứ việc gì khác. Ba chỗ trong hệ thống này cùng học một bài đó, và cả ba đều học sau khi đã trả giá.</p>
+</div>
+
+<p>Còn một thao tác nguy hiểm hơn cả năm cái trên: submit trên trang của Central Transport <strong>gọi xe tải thật đến kho</strong>. Tool hiện <strong>không có hàm nào</strong> bấm nút đó, và đấy là chủ ý.</p>
+
+<h2>Đang chạy và đang tắt</h2>
+<div class="tw">
+<table>
+<thead><tr><th>Phần</th><th>Nhịp</th><th>Trạng thái</th></tr></thead>
+<tbody>
+<tr><td>Nạp đơn mới từ mail</td><td>10 phút</td><td><span class="chip c-run">đang chạy</span></td></tr>
+<tr><td>Lấy số PRO về</td><td>15 phút</td><td><span class="chip c-run">đang chạy</span></td></tr>
+<tr><td>Đồng bộ hai sheet</td><td>15 phút</td><td><span class="chip c-run">đang chạy</span></td></tr>
+<tr><td>Tải slip + dựng BOL</td><td>5 phút, cả ngày</td><td><span class="chip c-run">đang chạy</span></td></tr>
+<tr><td>Giữ phiên DSM</td><td>5 phút</td><td><span class="chip c-run">đang chạy</span></td></tr>
+<tr><td>Nhánh B2C (nhãn UPS)</td><td>—</td><td><span class="chip c-off">chạy tay</span></td></tr>
+<tr><td>Hai tool sheet con</td><td>—</td><td><span class="chip c-off">chạy tay</span></td></tr>
+<tr><td>Xuất hoá đơn</td><td>—</td><td><span class="chip c-off">chạy tay</span></td></tr>
+<tr><td>Nhánh CTII</td><td>—</td><td><span class="chip c-off">tạm không xử lý</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Nút thắt lớn nhất</h3>
+<p>Phiên <strong>Lecangs</strong> sống khoảng bốn tiếng và không tự đăng nhập lại được — mật khẩu hiện bị máy chủ từ chối. Vì luật phân loại đã phụ thuộc tồn kho, phiên chết kéo theo cả việc <em>phân loại</em> chứ không riêng việc tra kho. Đó là lý do nhánh B2C chưa đưa lên cron: một job chạy mỗi mười lăm phút mà hầu như luôn phải dừng chỉ tạo thêm nhiễu.</p>
+
+<footer>
+  <p>Mọi con số và tên trường trong trang này đối chiếu từ mã nguồn và dữ liệu thật ngày 12/08/2026. Chi tiết kỹ thuật nằm trong <code>CLAUDE.md</code> và các tài liệu cùng thư mục.</p>
+</footer>
+
+</div>
+
+<button id="doNen" type="button" aria-label="Đổi nền sáng hoặc tối">
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+    <circle cx="8" cy="8" r="5"/><path d="M8 3v10" stroke-linecap="round"/><path d="M8 3a5 5 0 010 10z" fill="currentColor" stroke="none"/>
+  </svg><span id="doNenChu">Nền</span>
+</button>
+<script>
+(function(){
+  var r = document.documentElement, b = document.getElementById('doNen'), c = document.getElementById('doNenChu');
+  function heThong(){ return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+  function ve(){ c.textContent = (r.dataset.theme || heThong()) === 'dark' ? 'Nền tối' : 'Nền sáng'; }
+  try { var l = localStorage.getItem('dsm-nen'); if (l === 'dark' || l === 'light') r.dataset.theme = l; } catch (e) {}
+  ve();
+  b.addEventListener('click', function(){
+    var moi = (r.dataset.theme || heThong()) === 'dark' ? 'light' : 'dark';
+    r.dataset.theme = moi;
+    try { localStorage.setItem('dsm-nen', moi); } catch (e) {}
+    ve();
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ve);
+})();
+</script>
+</body>
+</html>

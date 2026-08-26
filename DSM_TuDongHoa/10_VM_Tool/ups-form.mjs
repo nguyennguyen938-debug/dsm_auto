@@ -240,8 +240,19 @@ export async function xacNhanResidential(page, laKhachLe) {
 
   const cong = page.locator(O.residential);
   if (!await cong.count()) {
-    throw new Error('UPS: bam Continue xong khong thay hop "Is this a residential address?". ' +
-                    `Dang o: ${page.url().slice(0, 80)}`);
+    /* 🔴 HỘP NÀY KHÔNG PHẢI LÚC NÀO CŨNG HIỆN — đo thật 09/08/2026.
+     * Với đơn khách lẻ TX (79850310), bấm Continue xong UPS đi thẳng sang Mục 2
+     * (`/ship/guided/package`) mà không hỏi gì. Nhiều khả năng UPS đã tự phân loại
+     * được địa chỉ nên bỏ qua bước xác nhận.
+     * Bản trước ném lỗi ở đây -> `chayFormUps` thử lại đủ 3 lần, mỗi lần ~3 phút,
+     * đốt 10 phút của một phiên chỉ sống 30 phút. Sang được Mục 2 nghĩa là ĐÃ XONG
+     * Mục 1, không có gì sai cả. */
+    if (/\/ship\/guided\/package/.test(page.url())) {
+      return { residential: null, boQua: true, url: page.url(),
+               ghiChu: 'UPS khong hoi residential, da sang Muc 2 — coi nhu xong' };
+    }
+    throw new Error('UPS: bam Continue xong khong thay hop "Is this a residential address?" ' +
+                    `va cung KHONG sang Muc 2. Dang o: ${page.url().slice(0, 80)}`);
   }
   // force: input bi che boi lop trang tri nen Playwright coi la khong nhin thay
   if (laKhachLe) await cong.check({ force: true });
@@ -508,6 +519,121 @@ export async function conPhien(page) {
  * @param don {noiNhan, kien, pickup, laKhachLe}
  * @returns { ok, page, lan, daDien } — hoặc ném lỗi kèm lý do rõ ràng
  */
+/* ==========================================================================
+ *  GHI LẠI MỌI LỜI GỌI API CỦA CHÍNH FORM WEB
+ * ------------------------------------------------------------------------
+ *  🎯 Vì sao cần: hoá đơn cho thấy phí `On-Call Pickup` chỉ xuất hiện ở vài đơn,
+ *     dù người vận hành bấm "Schedule a new pickup" cho MỌI đơn. Giả thuyết của
+ *     người vận hành: pickup tạo TRONG luồng shipment thì phí đi theo billing của
+ *     shipment (Home Depot trả), tạo RIÊNG thì người gửi trả.
+ *     Đường API bắt buộc tách hai lời gọi -> nếu giả thuyết đúng, chuyển sang API
+ *     sẽ khiến MỌI đơn phát sinh phí. Đây là câu hỏi tiền bạc, phải đo chứ không đoán.
+ *
+ *  🔴 ĐỪNG lọc theo chữ "pickup" trong URL — trang UPS bắn rất nhiều beacon
+ *     analytics dạng `ups?T=B&u=<url-trang>` và `a`, chúng chứa chữ "pickup" trong
+ *     tham số `u=` nên lọt lưới hết. Lọc theo **có postData** và **bỏ host analytics**.
+ * ======================================================================== */
+
+/** Host chỉ dùng cho đo đạc/quảng cáo — không phải API nghiệp vụ. */
+const HOST_RAC = /omtrdc\.net|demdex\.net|doubleclick|googletagmanager|google-analytics|adobedtm|qualtrics|tiqcdn|fullstory|dynatrace|newrelic/i;
+
+/**
+ * Bắt đầu ghi mọi request POST/PUT có thân. Trả về { ds, dung() }.
+ * `ds` được bồi thêm theo thời gian thực; gọi `dung()` để thôi lắng nghe.
+ */
+export function batPost(page) {
+  const ds = [];
+  const nghe = req => {
+    try {
+      const m = req.method();
+      if (m !== 'POST' && m !== 'PUT') return;
+      const url = req.url();
+      if (HOST_RAC.test(url)) return;
+      const body = req.postData();
+      if (!body) return;                       // beacon thường không có thân
+      ds.push({ luc: new Date().toISOString(), method: m, url, body });
+    } catch { /* bo qua */ }
+  };
+  page.on('request', nghe);
+  return { ds, dung: () => page.off('request', nghe) };
+}
+
+/**
+ * ⛔⛔ BẤM `Pay and Get Label(s)` — TẠO VẬN ĐƠN THẬT, TÍNH TIỀN THẬT,
+ *      VÀ ĐẶT LỆNH LẤY HÀNG THẬT nếu Mục 3 đã chọn "Schedule a new pickup".
+ *      Không hoàn tác được bằng code. Chỉ gọi khi người dùng đã cho phép đích danh.
+ *
+ * Lần chạy đầu chưa biết trang kết quả trông thế nào, nên hàm này **ưu tiên lưu
+ * bằng chứng hơn là tự động hoá**: lưu HTML + ảnh màn hình + toàn bộ request đã bắt,
+ * rồi mới cố đọc tracking. Thiếu tracking thì vẫn còn file để đọc tay — thà vậy còn
+ * hơn bấm xong mà không biết chuyện gì đã xảy ra.
+ *
+ * @param thuMuc nơi đổ bằng chứng
+ * @returns { trackings, tep, url }
+ */
+export async function bamPay(page, { thuMuc, log = () => {} } = {}) {
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  await fs.mkdir(thuMuc, { recursive: true });
+  const luu = async (ten, noiDung) => {
+    const p = path.join(thuMuc, ten);
+    await fs.writeFile(p, noiDung);
+    return p;
+  };
+
+  /* Nút Pay: tìm theo CHỮ, không theo id. Trang này chưa từng khảo sát nên chưa biết
+   * id, mà id của UPS lại hay trùng (đã gặp 3 lần). Đếm số khớp và chỉ lấy cái NHÌN
+   * THẤY ĐƯỢC — đúng bài học "3 link Create a Shipment, 2 cái bị ẩn". */
+  const timNut = async (re) => {
+    const ds = page.locator('button, input[type=submit], a');
+    const n = await ds.count();
+    const hop = [];
+    for (let i = 0; i < n; i++) {
+      const e = ds.nth(i);
+      const t = ((await e.innerText().catch(() => '')) || (await e.getAttribute('value').catch(() => '')) || '').trim();
+      if (re.test(t) && await e.isVisible().catch(() => false)) hop.push({ e, t });
+    }
+    return hop;
+  };
+
+  const nut = await timNut(/pay and get label/i);
+  log(`tim nut "Pay and Get Label(s)": ${nut.length} cai nhin thay duoc`);
+  if (nut.length !== 1) {
+    await luu('truoc-pay.html', await page.content());
+    await page.screenshot({ path: path.join(thuMuc, 'truoc-pay.png'), fullPage: true }).catch(() => {});
+    throw new Error(`bamPay: mong doi DUNG 1 nut, thay ${nut.length} -> DUNG, khong bam bua. ` +
+                    `Xem ${thuMuc}/truoc-pay.png`);
+  }
+
+  await page.screenshot({ path: path.join(thuMuc, 'truoc-pay.png'), fullPage: true }).catch(() => {});
+  log('⛔ BAM PAY — tao van don THAT');
+  await nut[0].e.click({ timeout: 30000 });
+  await page.waitForTimeout(35000);
+
+  // Sau Pay thường còn một bước "Get Labels" nữa (tài liệu quy trình có ghi).
+  const nut2 = await timNut(/^get labels?$/i);
+  if (nut2.length === 1) {
+    log('bam "Get Labels"');
+    await nut2[0].e.click({ timeout: 25000 }).catch(() => {});
+    await page.waitForTimeout(20000);
+  } else if (nut2.length > 1) {
+    log(`⚠️ thay ${nut2.length} nut "Get Labels" — khong bam, luu bang chung de xem tay`);
+  }
+
+  const tep = {};
+  tep.html = await luu('sau-pay.html', await page.content());
+  await page.screenshot({ path: path.join(thuMuc, 'sau-pay.png'), fullPage: true }).catch(() => {});
+  tep.anh = path.join(thuMuc, 'sau-pay.png');
+
+  /* Tracking number: 1Z + 16 ký tự. Quét cả trang, lọc trùng, giữ nguyên thứ tự.
+   * KHÔNG dựa vào một vùng DOM cụ thể vì chưa khảo sát trang này lần nào. */
+  const trackings = await page.evaluate(() =>
+    [...new Set((document.body.innerText.match(/\b1Z[0-9A-Z]{16}\b/g) || []))]);
+  log(`tracking doc duoc: ${trackings.length ? trackings.join(', ') : '(khong thay — doc tay trong file HTML)'}`);
+
+  return { trackings, tep, url: page.url() };
+}
+
 export async function chayFormUps(page, don, { lanToiDa = 3, log = () => {} } = {}) {
   if (typeof don.laKhachLe !== 'boolean') {
     throw new Error('chayFormUps: phai truyen ro laKhachLe (true = khach le, false = store)');

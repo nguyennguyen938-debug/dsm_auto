@@ -36,11 +36,19 @@ def main():
     if 'location' not in v:
         v['ship_name'], v['location'] = fb.parse_shipto(v['ship_name'])
     if 'carrier_name' not in v:
-        names = fb.load_carrier_names()
-        code = v['carrier'].strip().upper()
-        if code not in names:
-            raise SystemExit('Carrier %s KHONG CO trong carrier_name.csv' % code)
-        v['carrier_name'] = names[code]
+        code = (v.get('carrier') or '').strip().upper()
+        # 🔄 11/08/2026: CHO PHÉP BOL KHÔNG CÓ CARRIER.
+        # Người dùng tạm ngưng khâu chọn carrier cho đơn B2B — BOL vẫn dựng bình thường,
+        # riêng hai ô CARRIER NAME và SCAC để TRỐNG cho người điền tay sau.
+        # Nhận cả '' lẫn 'NULL' ('NULL' là giá trị ghi ở cột C của sheet).
+        if code in ('', 'NULL'):
+            v['carrier'] = ''
+            v['carrier_name'] = ''
+        else:
+            names = fb.load_carrier_names()
+            if code not in names:
+                raise SystemExit('Carrier %s KHONG CO trong carrier_name.csv' % code)
+            v['carrier_name'] = names[code]
 
     html = fb.to_static(fb.build(open(tpl_path, encoding='utf-8').read(), v))
 

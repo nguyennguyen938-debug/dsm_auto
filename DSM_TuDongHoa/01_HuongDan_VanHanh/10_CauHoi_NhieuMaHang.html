@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cần anh/chị quyết — đơn có nhiều mã hàng</title>
+<style>*{box-sizing:border-box}html,body{margin:0;padding:0}</style>
+</head>
+<body>
+<style>
+:root{
+  --bg:#F6F7F6; --surface:#FFFFFF; --sunk:#EDEFEE;
+  --ink:#15191B; --dim:#5C6467; --faint:#868D8F;
+  --line:#DCE0DE; --line2:#C3C9C6;
+  --blue:#2C5F7C; --blue-bg:#E7EFF4;
+  --wood:#A8703C; --wood-fill:#E0C09B;
+  --pallet:#8B8F8C; --pallet-fill:#D5D8D6;
+  --done:#3D6B45; --done-bg:#E8F0E9;
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1214; --surface:#171B1D; --sunk:#1E2325;
+    --ink:#E8EBE9; --dim:#9AA2A4; --faint:#798184;
+    --line:#262B2D; --line2:#363C3E;
+    --blue:#7FB3D0; --blue-bg:#152730;
+    --wood:#C99763; --wood-fill:#4A3A29;
+    --pallet:#8E9491; --pallet-fill:#2C3132;
+    --done:#8AB893; --done-bg:#16241A;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1214; --surface:#171B1D; --sunk:#1E2325;
+  --ink:#E8EBE9; --dim:#9AA2A4; --faint:#798184;
+  --line:#262B2D; --line2:#363C3E;
+  --blue:#7FB3D0; --blue-bg:#152730;
+  --wood:#C99763; --wood-fill:#4A3A29;
+  --pallet:#8E9491; --pallet-fill:#2C3132;
+  --done:#8AB893; --done-bg:#16241A;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);
+     font-size:17.5px;line-height:1.7;-webkit-font-smoothing:antialiased}
+.page{max-width:800px;margin:0 auto;padding:0 22px 100px;display:flex;flex-direction:column;gap:0}
+
+header{padding:60px 0 26px;display:flex;flex-direction:column;gap:14px}
+.eyebrow{font-family:var(--mono);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;
+         color:var(--blue);margin:0;font-weight:600}
+h1{font-size:clamp(28px,4.6vw,38px);line-height:1.15;margin:0;font-weight:750;
+   letter-spacing:-.022em;text-wrap:balance}
+.sub{font-size:19px;color:var(--dim);margin:0;max-width:54ch}
+
+.ctx{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+     padding:22px 24px;margin:8px 0 46px;display:flex;flex-direction:column;gap:12px}
+.ctx p{margin:0;font-size:16.5px}
+.ctx .h{font-weight:700;font-size:16px}
+
+.q{border-top:2px solid var(--ink);padding:26px 0 46px;display:flex;flex-direction:column;gap:18px}
+.qtag{display:flex;align-items:baseline;gap:12px}
+.qtag .n{font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.1em;
+         text-transform:uppercase;color:var(--blue)}
+.qtag .who{font-size:13.5px;color:var(--faint)}
+h2{font-size:24px;font-weight:730;margin:0;letter-spacing:-.015em;line-height:1.28;text-wrap:balance}
+.q p{margin:0;max-width:64ch}
+.why{font-size:16px;color:var(--dim)}
+
+figure{margin:6px 0 0;background:var(--surface);border:1px solid var(--line);
+       border-radius:10px;padding:20px 18px 14px;overflow-x:auto}
+figure svg{display:block;width:100%;min-width:600px;height:auto}
+figcaption{font-size:14px;color:var(--faint);margin-top:12px;font-family:var(--mono)}
+
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:16px;min-width:520px}
+th,td{text-align:left;padding:13px 18px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{font-size:13px;font-weight:700;color:var(--dim);text-transform:uppercase;
+         letter-spacing:.06em;background:var(--sunk)}
+tbody th{font-weight:600;color:var(--dim);font-size:15.5px;width:38%}
+tr:last-child td,tr:last-child th{border-bottom:none}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600}
+
+.ask{border-left:4px solid var(--blue);background:var(--blue-bg);border-radius:0 8px 8px 0;
+     padding:16px 20px;display:flex;flex-direction:column;gap:6px}
+.ask .t{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--blue);margin:0}
+.ask p{margin:0;font-size:17px;font-weight:600}
+.ask .opt{margin:0;font-size:16px;font-weight:400;color:var(--dim)}
+
+.done{border-left:4px solid var(--done);background:var(--done-bg);border-radius:0 8px 8px 0;
+      padding:16px 20px;display:flex;flex-direction:column;gap:6px;margin-bottom:46px}
+.done .t{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;
+         text-transform:uppercase;color:var(--done);margin:0}
+.done p{margin:0;font-size:16.5px}
+
+code{font-family:var(--mono);font-size:.87em;background:var(--sunk);border:1px solid var(--line);
+     border-radius:4px;padding:1px 6px;white-space:nowrap}
+strong{font-weight:700}
+footer{border-top:1px solid var(--line);padding-top:24px;color:var(--faint);font-size:15px}
+a{color:var(--blue)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:3px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="page">
+
+<header>
+  <p class="eyebrow">Cần quyết định · 12/08/2026</p>
+  <h1>Phiếu có hai mã hàng thì xếp thế nào?</h1>
+  <p class="sub">Ba câu hỏi. Câu đầu là câu chính — hỏi người xếp hàng ở kho là ra ngay.</p>
+</header>
+
+<div class="ctx">
+  <p class="h">Chuyện đang xảy ra</p>
+  <p>Một phiếu giao hàng có thể có nhiều dòng hàng. Với <strong>hàng chuyển phát</strong>, máy làm được rồi — mỗi mã một kiện, mỗi kiện một nhãn riêng.</p>
+  <p>Với <strong>hàng đi xe tải</strong> thì máy <strong>dừng lại và chờ người</strong>, vì chưa biết ghi giấy vận chuyển thế nào. Đây không phải thiếu phần mềm, mà thiếu quy tắc: mấy tấm gỗ khác cỡ nhau xếp lên pallet ra sao thì chỉ người làm kho mới biết.</p>
+</div>
+
+<div class="done">
+  <p class="t">Đã trả lời</p>
+  <p><strong>Có gặp phiếu xe tải nhiều mã hàng không?</strong> → Có, thi thoảng sẽ gặp. Nên việc này đáng làm.</p>
+</div>
+
+<article class="q">
+  <div class="qtag"><span class="n">Câu 1 — câu chính</span><span class="who">hỏi người xếp hàng ở kho</span></div>
+  <h2>Hai mã hàng khác cỡ thì kho xếp một pallet chung, hay mỗi mã một pallet riêng?</h2>
+  <p class="why">Lấy ví dụ thật: một tấm butcher block 8 ft (<span class="num">96″ × 25″</span>) và một tấm đảo bếp 6 ft (<span class="num">72″ × 39″</span>) trên cùng một phiếu.</p>
+
+<figure>
+<svg viewBox="0 0 760 546" role="img" aria-label="Bản vẽ so sánh hai cách xếp. Cách A: hai tấm gỗ chồng lên một pallet chung, cao 10 inch, rộng 96 inch. Cách B: mỗi tấm một pallet riêng, mỗi pallet cao 8 inch, một cái rộng 96 inch và một cái rộng 72 inch.">
+  <defs>
+    <marker id="dim-s" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 10 0 L 0 5 L 10 10 z" fill="var(--blue)"/></marker>
+    <marker id="dim-e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--blue)"/></marker>
+  </defs>
+  <g font-family="system-ui, sans-serif">
+
+    <!-- ============ CÁCH A ============ -->
+    <text x="0" y="20" font-size="15" font-weight="700" fill="var(--ink)">Cách A · xếp chung một pallet</text>
+    <text x="0" y="42" font-size="13.5" fill="var(--dim)">hai tấm chồng lên nhau, một kiện xếp</text>
+
+    <!-- tấm đảo bếp 72" trên cùng -->
+    <rect x="70" y="90" width="180" height="20" fill="var(--wood-fill)" stroke="var(--wood)" stroke-width="1.6"/>
+    <!-- tấm butcher block 96" -->
+    <rect x="70" y="110" width="240" height="20" fill="var(--wood-fill)" stroke="var(--wood)" stroke-width="1.6"/>
+    <!-- pallet -->
+    <rect x="70" y="130" width="240" height="12" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+    <rect x="70" y="142" width="24" height="48" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+    <rect x="178" y="142" width="24" height="48" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+    <rect x="286" y="142" width="24" height="48" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+
+    <!-- nhãn hai tấm -->
+    <line x1="252" y1="100" x2="330" y2="100" stroke="var(--dim)" stroke-width="1"/>
+    <text x="338" y="104" font-size="13" fill="var(--ink)" font-family="ui-monospace, monospace">816390-B</text>
+    <text x="428" y="104" font-size="13" fill="var(--dim)">tấm đảo bếp 6 ft</text>
+    <line x1="312" y1="120" x2="330" y2="120" stroke="var(--dim)" stroke-width="1"/>
+    <text x="338" y="124" font-size="13" fill="var(--ink)" font-family="ui-monospace, monospace">818250-B</text>
+    <text x="428" y="124" font-size="13" fill="var(--dim)">tấm 8 ft</text>
+
+    <!-- kích thước cao 10" -->
+    <line x1="50" y1="90" x2="50" y2="190" stroke="var(--blue)" stroke-width="1.3" marker-start="url(#dim-s)" marker-end="url(#dim-e)"/>
+    <line x1="44" y1="90" x2="70" y2="90" stroke="var(--blue)" stroke-width=".8" opacity=".6"/>
+    <line x1="44" y1="190" x2="70" y2="190" stroke="var(--blue)" stroke-width=".8" opacity=".6"/>
+    <text x="42" y="145" font-size="13" fill="var(--blue)" text-anchor="end" font-family="ui-monospace, monospace" font-weight="600">10″</text>
+
+    <!-- kích thước rộng 96" -->
+    <line x1="70" y1="212" x2="310" y2="212" stroke="var(--blue)" stroke-width="1.3" marker-start="url(#dim-s)" marker-end="url(#dim-e)"/>
+    <line x1="70" y1="196" x2="70" y2="218" stroke="var(--blue)" stroke-width=".8" opacity=".6"/>
+    <line x1="310" y1="136" x2="310" y2="218" stroke="var(--blue)" stroke-width=".8" opacity=".6"/>
+    <text x="190" y="232" font-size="13" fill="var(--blue)" text-anchor="middle" font-family="ui-monospace, monospace" font-weight="600">96″</text>
+
+    <text x="338" y="180" font-size="13.5" fill="var(--ink)" font-weight="650">1 kiện xếp</text>
+    <text x="338" y="200" font-size="13.5" fill="var(--dim)" font-family="ui-monospace, monospace">242 lb · hạng cước 92.5</text>
+    <text x="338" y="222" font-size="13" fill="var(--dim)">bề rộng ghi trên giấy là 39″ — pallet</text>
+    <text x="338" y="240" font-size="13" fill="var(--dim)">phải bao được tấm rộng nhất</text>
+
+    <line x1="0" y1="272" x2="760" y2="272" stroke="var(--line2)" stroke-width="1" stroke-dasharray="5 4"/>
+
+    <!-- ============ CÁCH B ============ -->
+    <text x="0" y="308" font-size="15" font-weight="700" fill="var(--ink)">Cách B · mỗi mã một pallet</text>
+    <text x="0" y="330" font-size="13.5" fill="var(--dim)">hai kiện xếp, đi cùng chuyến</text>
+
+    <!-- pallet 1: 96" -->
+    <rect x="70" y="378" width="240" height="20" fill="var(--wood-fill)" stroke="var(--wood)" stroke-width="1.6"/>
+    <rect x="70" y="398" width="240" height="12" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+    <rect x="70" y="410" width="24" height="48" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+    <rect x="178" y="410" width="24" height="48" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+    <rect x="286" y="410" width="24" height="48" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+    <text x="70" y="368" font-size="13" fill="var(--ink)" font-family="ui-monospace, monospace">818250-B</text>
+
+    <!-- pallet 2: 72" -->
+    <rect x="380" y="378" width="180" height="20" fill="var(--wood-fill)" stroke="var(--wood)" stroke-width="1.6"/>
+    <rect x="380" y="398" width="180" height="12" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+    <rect x="380" y="410" width="24" height="48" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+    <rect x="458" y="410" width="24" height="48" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+    <rect x="536" y="410" width="24" height="48" fill="var(--pallet-fill)" stroke="var(--pallet)" stroke-width="1.6"/>
+    <text x="380" y="368" font-size="13" fill="var(--ink)" font-family="ui-monospace, monospace">816390-B</text>
+
+    <!-- kích thước cao 8" -->
+    <line x1="50" y1="378" x2="50" y2="458" stroke="var(--blue)" stroke-width="1.3" marker-start="url(#dim-s)" marker-end="url(#dim-e)"/>
+    <line x1="44" y1="378" x2="70" y2="378" stroke="var(--blue)" stroke-width=".8" opacity=".6"/>
+    <line x1="44" y1="458" x2="70" y2="458" stroke="var(--blue)" stroke-width=".8" opacity=".6"/>
+    <text x="42" y="423" font-size="13" fill="var(--blue)" text-anchor="end" font-family="ui-monospace, monospace" font-weight="600">8″</text>
+
+    <!-- kích thước rộng 96" và 72" -->
+    <line x1="70" y1="480" x2="310" y2="480" stroke="var(--blue)" stroke-width="1.3" marker-start="url(#dim-s)" marker-end="url(#dim-e)"/>
+    <line x1="70" y1="464" x2="70" y2="486" stroke="var(--blue)" stroke-width=".8" opacity=".6"/>
+    <line x1="310" y1="464" x2="310" y2="486" stroke="var(--blue)" stroke-width=".8" opacity=".6"/>
+    <text x="190" y="500" font-size="13" fill="var(--blue)" text-anchor="middle" font-family="ui-monospace, monospace" font-weight="600">96″</text>
+
+    <line x1="380" y1="480" x2="560" y2="480" stroke="var(--blue)" stroke-width="1.3" marker-start="url(#dim-s)" marker-end="url(#dim-e)"/>
+    <line x1="380" y1="464" x2="380" y2="486" stroke="var(--blue)" stroke-width=".8" opacity=".6"/>
+    <line x1="560" y1="464" x2="560" y2="486" stroke="var(--blue)" stroke-width=".8" opacity=".6"/>
+    <text x="470" y="500" font-size="13" fill="var(--blue)" text-anchor="middle" font-family="ui-monospace, monospace" font-weight="600">72″</text>
+
+    <text x="600" y="404" font-size="13.5" fill="var(--ink)" font-weight="650">2 kiện xếp</text>
+    <text x="600" y="424" font-size="13.5" fill="var(--dim)" font-family="ui-monospace, monospace">297 lb</text>
+    <text x="600" y="444" font-size="13.5" fill="var(--dim)" font-family="ui-monospace, monospace">hạng 85 + 85</text>
+    <text x="600" y="466" font-size="13" fill="var(--dim)">nặng hơn 55 lb</text>
+    <text x="600" y="484" font-size="13" fill="var(--dim)">vì cộng hai lần</text>
+    <text x="600" y="502" font-size="13" fill="var(--dim)">tiền pallet</text>
+  </g>
+</svg>
+<figcaption>Hình minh hoạ — chiều cao phóng to cho dễ nhìn, không theo tỉ lệ thật.</figcaption>
+</figure>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Máy sẽ ghi lên giấy</th><th>Cách A · chung</th><th>Cách B · riêng</th></tr></thead>
+    <tbody>
+      <tr><th>Số kiện xếp</th><td class="num">1</td><td class="num">2</td></tr>
+      <tr><th>Cân nặng</th><td class="num">242 lb</td><td class="num">297 lb</td></tr>
+      <tr><th>Kích thước</th><td class="num">96″ × 39″</td><td class="num">96″ × 25″<br>72″ × 39″</td></tr>
+      <tr><th>Hạng cước</th><td class="num">92.5</td><td class="num">85 và 85</td></tr>
+      <tr><th>Số dòng hàng</th><td class="num">1</td><td class="num">2</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="why">Hạng cước lệch nhau là <strong>tiền cước lệch nhau</strong>. Máy không được phép đoán chỗ này, nên nó dừng.</p>
+
+  <div class="ask">
+    <p class="t">Cần trả lời</p>
+    <p>Kho xếp chung một pallet, hay mỗi mã một pallet?</p>
+    <p class="opt">Nếu tuỳ trường hợp thì cho biết tuỳ theo cái gì — chiều dài tấm, tổng số tấm, hay gì khác.</p>
+  </div>
+</article>
+
+<article class="q">
+  <div class="qtag"><span class="n">Câu 2 — chỉ hỏi nếu câu 1 là "xếp chung"</span></div>
+  <h2>Xếp chồng hai loại tấm khác nhau thì chiều cao ghi bao nhiêu?</h2>
+  <p class="why">Hiện máy tính <strong>6″ chân pallet + 2″ cho mỗi tấm</strong>. Hai tấm thì ra <span class="num">10″</span>, đúng như hình cách A ở trên.</p>
+  <p>Xếp chồng hai loại khác cỡ thì vẫn cộng như vậy, hay kho có cách kê khác làm nó cao hơn?</p>
+  <div class="ask">
+    <p class="t">Cần trả lời</p>
+    <p>Công thức <span class="num">6″ + 2″ mỗi tấm</span> còn đúng khi xếp chồng khác loại không?</p>
+    <p class="opt">Chiều cao vào thẳng công thức hạng cước, nên sai chiều cao là sai tiền.</p>
+  </div>
+</article>
+
+<article class="q">
+  <div class="qtag"><span class="n">Câu 3 — độc lập, trả lời lúc nào cũng được</span><span class="who">hàng chuyển phát</span></div>
+  <h2>Đơn hai mã mà không kho nào còn đủ cả hai — có được lấy mỗi mã một kho không?</h2>
+  <p class="why">Ví dụ: kho Perris còn tấm 8 ft nhưng hết tấm đảo bếp; kho Burlington thì ngược lại.</p>
+  <p>Hiện máy <strong>bắt buộc một kho phải có đủ tất cả các mã</strong>. Không kho nào đủ thì nó dừng và báo người. An toàn, nhưng đơn hay bị kẹt vì lý do này.</p>
+  <div class="ask">
+    <p class="t">Cần trả lời</p>
+    <p>Cho phép khách nhận hai gói từ hai kho khác nhau chứ?</p>
+    <p class="opt">Nếu được thì đơn sẽ ít kẹt hơn hẳn. Nếu không thì giữ nguyên như hiện tại.</p>
+  </div>
+</article>
+
+<footer>
+  Ba câu này chỉ liên quan phiếu có <strong>từ hai mã hàng trở lên</strong>. Phiếu một mã hàng — phần lớn đơn — chạy bình thường, không đổi gì.
+</footer>
+
+</div>
+</body>
+</html>

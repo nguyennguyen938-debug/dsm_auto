@@ -1,0 +1,49 @@
+# crontab cua VM wayfair-auto-01 — xuat 2026-08-26 16:03 gio VN
+#
+# 🔴 KHONG nam trong git neu khong xuat tay — mat file nay la mat toan bo lich chay.
+# Dung lai tren may moi:   crontab - < 10_VM_Tool/crontab.txt
+# (dung 'crontab <file>' — duong dan bi cat o 100 ky tu)
+#
+# Dong dau la cua DU AN KHAC (/opt/wayfair) — GIU NGUYEN, dung xoa.
+# Nhanh Ground (chay-ground.sh) CO Y chua co trong day: bat la mua nhan UPS that.
+
+# Wayfair AR/AP + Dropship -> Drive -> Sheet.
+# Hàng ngày 08:35 ICT. Phút :35 để tránh các task chạy phút :00.
+# Chạy hàng ngày (không phải hàng tuần) để session Wayfair chết thì biết trong
+# vòng một ngày. Chống trùng đảm bảo chạy nhiều lần không tạo file rác.
+35 8 * * * /opt/wayfair/scripts/run-finance.sh
+
+# DSM: tai packing slip tu CommerceHub -> Drive _INBOX.
+# 5 phut/lan, 07:00-19:00 gio ICT, Thu 2 - Thu 6. HAI KHAU noi tiep:
+#   1. run.mjs      tai + tach packing slip   (can session DSM)
+#   2. xu-ly-don.mjs dung BOL nhom khong-web  (KHONG can session DSM -> van chay
+#      duoc khi khau 1 bao ma 3)
+# ⛔ Job nay SUBMIT THAT, khong hoan tac duoc. Wrapper co flock + --max 15.
+# Session DSM chi song vai tieng va phai dang nhap tay -> ma 3 trong log la
+# BINH THUONG, khong phai bug. Log: 11_TaiVe/logs/dsm-tool.log
+# 🔄 Doi 10/08/2026: chay 24/24 thay vi 7-19.
+# Ly do: CheckRithum nap don moi 24/7, nhung khau tai slip chi chay 7-19 nen don ve
+# buoi toi phai nam cho toi 7h sang (don 81885121 tre ~11 tieng). Session DSM da do
+# duoc la SLIDING (song 110h, 727 luot khong loi) nen chay dem khong con sinh ma 3.
+# ⛔ NGHI 8:25-8:45: tranh cron Wayfair `35 8 * * *` — MAY DUNG CHUNG, xem CLAUDE.md #10.
+# Bat lai 11/08/2026 sau khi sua loi so luong (o SHIP QUANTITY ON PACKING SLIP
+# tung bi dien cung '1' thay vi Quantity Ordered) va tam ngung chon carrier B2B.
+# ▶️ BAT LAI 11/08/2026 (lan 2) — carrier van ghi NULL (NGUNG_CHON_CARRIER_B2B=true).
+# TAT LAI: them dau # vao dau hai dong duoi.
+*/5 0-7,9-23 * * * /home/Lenovo/dsm_auto/DSM_TuDongHoa/10_VM_Tool/chay-dinh-ky.sh
+0,5,10,15,20,50,55 8 * * * /home/Lenovo/dsm_auto/DSM_TuDongHoa/10_VM_Tool/chay-dinh-ky.sh
+
+# DSM: cham nhe vao session moi 5 phut de no khoi het han vi nam im.
+# Mot GET gotoHome.do, khong submit/tai/ghi gi. Dung chung khoa voi chay-dinh-ky.sh.
+# Phut 2,7,12,...,57 — LECH khoi :00 va :30 co y: hai script dung CHUNG khoa, de
+# trung phut la job chinh bi bo doi (da xay ra 06/08: 08:30 va 09:00 deu BO QUA).
+# Chay 24/7 chu khong 6-20: khung cu de lai khoang mu 9 tieng, khong do duoc gi.
+# ⚠️ CHUA BIET CO TAC DUNG KHONG — xem cot "tuoi" trong 11_TaiVe/logs/giu-session.log:
+#    tuoi vuot xa 5 tieng  -> het han theo thoi gian nam im, giu duoc, giu cron nay
+#    luon chet quanh 1 moc -> het han tuyet doi, BO cron nay di cho do request
+2-59/5 * * * * /home/Lenovo/dsm_auto/DSM_TuDongHoa/10_VM_Tool/giu-session.sh
+
+# Don _INBOX: manifest + file gop + slip da vao folder PO. 1 gio/lan, phut :25 de
+# lech khoi */5 va 2-59/5. setTrashed nen khoi phuc duoc 30 ngay.
+# Don GROUND luon duoc GIU (khong bao gio co folder PO - <po>) — chu y, khong phai sot.
+25 * * * * /home/Lenovo/dsm_auto/DSM_TuDongHoa/10_VM_Tool/don-dep.sh

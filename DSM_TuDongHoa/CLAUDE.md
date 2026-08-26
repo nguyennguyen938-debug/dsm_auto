@@ -91,6 +91,10 @@ F=ShipTo Name · G=SKU · H=Product name · I=Quantity · J=BOL/SHIPPING LABEL(X
 L=RITHUM CONFIRM(tay) · M=WAREHOUSE NOTIFICATION(tay) · N=PRO#/SHIPPING# · O=PICKUP# ·
 P=Link Drive · Q=Note(tay)`
 
+**Cột T = `B2B and B2C`** (thêm 11/08/2026) — cột thứ **20**, R và S bỏ trống.
+`X` ở đây nghĩa là packing slip có **SKU hỗn hợp**, cần cả hai luồng, và **chưa xử lý**.
+`copyB2B_B2C` thấy X thì copy sang **cả hai** sheet, chỉ chép **A, B, T**.
+
 **Mã carrier (cột C):** AACT · XGSI · BXID · CTII · SEFL · FXFE · ABFS
 
 ---
@@ -100,7 +104,7 @@ P=Link Drive · Q=Note(tay)`
 | Điều kiện | Xử lý |
 |---|---|
 | **Cột C có Carrier** hoặc **cột D có tên người** (Eric/Kap/Xuan…) | **BỎ QUA** — đang có người làm tay, làm nữa = **lệnh pickup trùng** |
-| Bang **AK / HI** | **DỪNG, HỎI NGƯỜI DÙNG** — `05_TraCuu/carrier.csv` chỉ có 48 bang lục địa + NCA/SCA |
+| Bang **AK / HI** | 🔄 **ĐỔI 11/08/2026: xử lý bình thường** — carrier để `NULL`, đơn vào sheet **B2B**, dựng BOL như mọi đơn Misc. Trước đây dừng và hỏi vì `carrier.csv` chỉ có 48 bang lục địa; nay khâu chọn hãng đang tạm ngưng nên bảng đó không được dùng tới. Chốt chặn vẫn còn trong `chonCarrier()`, tự sống lại nếu bật `NGUNG_CHON_CARRIER_B2B = false`.<br>✅ **12/08: nhánh Ground cũng thông.** `phanLoaiSku()` có **luật 0** — `BANG_LUON_B2B = {AK,HI}` xét **trước cả SKU**, đẩy đơn về B2B nên không bao giờ tới `khoUuTien()` (hàm này vẫn ném lỗi nếu gọi trực tiếp, chốt chặn còn nguyên).<br>⚠️ Đơn **Ground** đi AK/HI hiện rơi vào nhánh `chiDienSheet` — **chỉ điền sheet, không dựng BOL**. Chưa rõ có đúng ý không, xem mục 8 |
 | Ship Via = Ground | 🔄 **ĐỔI 06–08/08** — có quy trình riêng (UPS label → Lecangs → cột N), xem `7_QuyTrinh_Ground_UPS.md`. `xu-ly-don.mjs` vẫn bỏ qua Ground: nhánh này chạy riêng, **chưa nối vào** |
 
 Dấu hiệu người làm tay: `x` **viết thường** ở cột J/M (script luôn ghi `X` HOA) và **cột P trống**.
@@ -119,6 +123,7 @@ Dấu hiệu người làm tay: `x` **viết thường** ở cột J/M (script l
 | `maUps` | **GET** `?action=maUps&khoa=<KHOA>[&phut=5]` — mã MFA của UPS từ Gmail. ⛔ Bắt buộc có khoá (Script Properties, không vào git). Phía VM gọi bằng `phien.mjs → layMaUps()` | `o.ma` — **CHUỖI**, có thể `null`, có thể bắt đầu bằng **số 0** |
 | `makeFolder` | POST `{action:'makeFolder', po, pickupSchedule, boQuaTran?}` — `boQuaTran:true` cho đơn **Ground** (không áp trần 20/ngày) | `o.folderId` |
 | `fillRow` | POST `{action:'fillRow', po, carrier, ..., skipCap:true}` | `o.row` |
+| `danhDauB2B_B2C` | POST `{action:'danhDauB2B_B2C', po}` — ghi `X` vào **cột T**, không chạm cột nào khác. Cho đơn SKU hỗn hợp (chưa xử lý) | `o.row` |
 | upload file | POST `{folderId, filename, base64, mimeType}` | `o.id` |
 | HTML→PDF | POST `{folderId, filename, html}` | `o.id` |
 
@@ -141,6 +146,12 @@ mk = POST {action:'makeFolder', po, pickupSchedule:'08/04/2026'}
      POST {action:'fillRow', po, ..., pickupSchedule: mk.pickupSchedule, skipCap:true, linkDrive: mk.url}
 ```
 `makeFolder` **chốt ngày trước** (áp trần 20 đơn/ngày), `fillRow` dùng lại đúng ngày đó với `skipCap:true`.
+
+🔴 **Gọi qua `W.layFolder()`, KHÔNG gọi thẳng `W.makeFolder()`** (chốt 13/08/2026).
+`makeFolder` tìm folder theo **NGÀY** rồi mới tìm `PO - <po>` bên trong, nên chạy lại vào ngày
+khác là tạo folder thứ hai và `fillRow` ghi đè cột P — folder cũ thành mồ côi.
+Đã xảy ra thật: `07587667` và `81827440` mỗi PO có folder ở **hai ngày**; 7 PO bị `fillRow` 2–3 lần.
+`layFolder` ghi `11_TaiVe/drive/<PO>.json` ngay sau lần tạo đầu và dùng lại folder đó mãi mãi.
 `skipCap` cũng dùng cho **CTII** khi lịch pickup đã cam kết với carrier.
 
 ---
@@ -194,7 +205,15 @@ DSM sinh file **có độ trễ** — dùng `doiDuSlip()` để đợi đủ sli
 
 ### Các thông số khác
 
-- `SHIP QUANTITY ON PACKING SLIP` là **cờ 0/1**, **không phải số lượng đơn** → luôn điền `1`.
+- 🔴 `SHIP QUANTITY ON PACKING SLIP` = **ĐÚNG SỐ `QUANTITY ORDERED`** của dòng hàng đó.
+  **SỬA 11/08/2026 — bản cũ SAI.** Trước đây ghi "là cờ 0/1, luôn điền `1`".
+  Bằng chứng: PO `81827440` có `QUANTITY ORDERED = 2`; điền `1` thì slip in ra
+  `Qty Shipped 1`, và BOL dựng theo slip đó ghi **1 kiện 183 lb thay vì 2 kiện**.
+  Hàng giao thiếu mà mọi giấy tờ vẫn khớp nhau nên không ai phát hiện.
+  → `dsm.soLuongDat()` đọc cột `QUANTITY ORDERED` ngay trên trang reprint rồi điền vào
+  từng ô `.shipped`. **KHÔNG dùng `QUANTITY REMAINING`** — trên PO đó cột này = 0.
+  Đơn nhiều dòng hàng có nhiều ô `.shipped`; số ô phải khớp số dòng đọc được, lệch thì
+  script DỪNG chứ không đoán.
 - **Không có CSRF token** — chỉ cần session cookie.
 - Tên file DSM là **11 chữ số** + `.pdf`; Chrome thêm ` (n)` khi trùng tên.
 - `input[name=quicksearchbtn]` **không phải nút Go** — nó là Expand/Hide.
@@ -224,7 +243,9 @@ DSM sinh file **có độ trễ** — dùng `doiDuSlip()` để đợi đủ sli
 | `07_Plan_AutoPackingSlip.md` | Thiết kế + toàn bộ khảo sát endpoint DSM |
 | `08_Tool_TaiPackingSlip.js` | Tool chạy **trong tab** Chrome (3 hàm) |
 | `10_VM_Tool/` | **Bản Node + Playwright chạy tự động trên VM.** Có `README.md` riêng — **đọc nó trước khi sửa code ở đây** |
-| `10_VM_Tool/test-ground-tra.mjs` | Bộ test nhánh Ground: `node 10_VM_Tool/test-ground-tra.mjs` (25/25) |
+| `10_VM_Tool/test-ground-tra.mjs` | Bộ test nhánh Ground: `node 10_VM_Tool/test-ground-tra.mjs` (37/37) |
+| `11_TaiVe/drive/<PO>.json` | Bằng chứng **đã có folder Drive** — `layFolder()` đọc trước khi gọi `makeFolder`. Thiếu nó, chạy lại vào ngày khác sinh folder thứ hai và ghi đè cột P |
+| `11_TaiVe/lecangs/<PO>_<tracking>.json` | Bằng chứng **đã tạo đơn parcel Lecangs** — thiếu nó, chạy lại sẽ tạo đơn xuất kho thứ hai |
 | `00_BanGiao_PhienMoi_08082026.md` | **Trạng thái mới nhất** — đọc ngay sau file này |
 | `11_TaiVe/` | **Chỗ tải file về trên VM** (thay `C:\Users\Lenovo\Downloads`). Đã `.gitignore` |
 | `06_File_Cu_KHONG_DUNG/` | ⚠️ **ĐỪNG dán lên Apps Script** — trùng tên hàm sẽ đè code mới |
@@ -235,6 +256,22 @@ DSM sinh file **có độ trễ** — dùng `doiDuSlip()` để đợi đủ sli
 
 `# PKGS` = 1 · `HANDLING UNIT QTY` = 1 · `PACKAGE QTY` = tổng Qty · `WEIGHT` = Σ(cột K × Qty) + 55
 (cộng 55 **một lần** cho pallet) · **bỏ trống dòng 4 SPECIAL INSTRUCTIONS**.
+
+### Đơn NHIỀU MÃ HÀNG — xếp chung MỘT pallet (người dùng chốt 12/08/2026)
+
+Kho xếp chồng các tấm lên **một** pallet, không tách. Hệ quả trong `tinhBOL()`:
+
+| | Cách tính |
+|---|---|
+| `WEIGHT` | Σ(cột K × Qty của **mọi** mã) **+ 55 một lần** |
+| `H` để tính class | `6 + 2 × TỔNG số tấm` — người dùng xác nhận công thức +2″/tấm vẫn đúng khi chồng khác loại |
+| `L`, `W` để tính class | **LỚN NHẤT** theo từng chiều, không lấy của mã đầu |
+| dòng mô tả | mỗi mã một dòng (`fill_bol.py` tự sinh từ `pallet.csv`) |
+
+🔴 **`L`/`W` phải lấy lớn nhất** — pallet phải bao được tấm rộng nhất. Ví dụ `818250` (96×25)
++ `816390` (72×39): lấy 96×39 ra class **92.5**, lấy 96×25 của mã đầu ra class **70** — sai
+tiền cước, mà số trông vẫn hợp lý.
+`fill_bol.py` đã cộng được nhiều mã từ trước; kiểm chéo JS↔Python **137/137 khớp**.
 `ADDITIONAL SHIPPER INFO` = `COMMODITY DESCRIPTION` = `SKU-<model> Unfinished <GỖ> <độ dài> FT`,
 mỗi SKU một dòng. Loại gỗ = chữ sau `Unfinished` ở cột B của `pallet.csv`, viết HOA.
 Độ dài = cột C (inch) ÷ 12.
@@ -353,6 +390,24 @@ Hiện `CheckMail_PRO.gs` đọc PRO từ folder `SIGNED PRO#` trên Drive (đ�
 Đổi lại là chuyện thay lời gọi trong `checkMarioPro()`, không phải viết mới.
 Cần chốt trước: đọc mail **thay hẳn** Drive, hay **thử mail trước rồi mới tới Drive**?
 
+**3. 12 ĐƠN GROUND ĐANG TREO — chưa ai tạo nhãn.** Đo 13/08/2026.
+`xu-ly-don.mjs` ghi `C = UPS` cho đơn Ground rồi dừng (đúng thiết kế), nhưng
+**`chay-ground.sh` chưa vào cron** nên không ai làm bước tạo nhãn. Cột C vừa là dữ liệu vừa
+là cờ "đã có người nhận", nên mọi lượt sau đều bỏ qua — đơn nằm im, không log lỗi nào.
+Đo được: **16 PO có `C = UPS`, chỉ 4 có bằng chứng nhãn** (`11_TaiVe/ups/<PO>.json`).
+Người dùng đã xem và **chưa chọn bật cron** (13/08) — bật là mua nhãn UPS thật và tạo đơn
+xuất kho Lecangs, nên phải hỏi trước.
+
+**4. ĐƠN GROUND ĐI AK/HI — CÓ DỰNG BOL KHÔNG?** Chưa chốt, hỏi 12/08/2026.
+Luật 0 đã đẩy nhóm này về B2B (không còn kẹt), nhưng chúng rơi vào nhánh `chiDienSheet`
+ở `xu-ly-don.mjs:348` nên **chỉ điền sheet, không dựng BOL** — theo quyết định cũ
+*"hàng Ground về B2B thì trước mắt chỉ điền sheet"*, lý do là hàng Ground đi parcel,
+dựng BOL pallet cho nó sai bản chất.
+Nhưng câu yêu cầu luật 0 lại nhắc *"để trống carrier khi tạo BOL"* — nếu ý là nhóm AK/HI
+**phải** có BOL thì cần tách riêng khỏi nhánh `chiDienSheet`.
+⚠️ Kèm theo: `pallet.csv` chỉ có 10 SKU, nên kể cả khi bật dựng BOL, đơn dùng SKU ngoài
+danh sách đó vẫn không tính được weight.
+
 ---
 
 ### ⚠️ Chưa kiểm chứng — biết là chưa chắc
@@ -370,8 +425,17 @@ Cần chốt trước: đọc mail **thay hẳn** Drive, hay **thử mail trư�
 
 - **`pallet.csv` thiếu 4 SKU** thấy trong lô 28 đơn: `833250` · `814300` · `815253` · `836250`.
   Đơn Misc dùng chúng sẽ bị gạt sang danh sách chờ (không tính được weight → không dựng được BOL).
-- `carrier.csv` thiếu **AK** và **HI** → dừng và hỏi. NCA/SCA cho kết quả giống nhau.
-- **Đơn nhiều SKU: parser TỪ CHỐI**, chưa có mẫu thật nào để kiểm. 28 đơn khảo sát đều 1 SKU.
+- `carrier.csv` và `warehouse_ranking_by_state.csv` đều thiếu **AK** và **HI** — không còn chặn
+  đơn nào (luật 0 của `phanLoaiSku()` đẩy chúng sang B2B trước, xem mục 3), nhưng `carrier.csv`
+  sẽ chặn lại ngay khi bật lại khâu chọn hãng. NCA/SCA cho kết quả giống nhau.
+- **Đơn nhiều SKU** — ✅ **LÀM ĐƯỢC cả hai nhánh từ 12/08/2026** (bản 11/08 ghi "chưa làm
+  được" đã hết đúng). Chốt chặn `lyDoNhieuSku` trong `xu-ly-don.mjs` đã bỏ.
+  · **Nhánh BOL**: `tinhBOL()` nhận **mảng** — Σ(K×Qty) **+55 một lần**, `H = 6 + 2×tổng tấm`,
+    `L`/`W` lấy **lớn nhất** theo từng chiều. Xem mục 7.
+  · **Nhánh Ground**: `chiaTheoKho()` — không kho nào đủ mọi mã thì **tách shipment theo kho**.
+  · **hỗn hợp** (trộn B2B/B2C) vẫn tích `X` cột T, mỗi luồng làm phần của mình — không đổi.
+  ⚠️ Chưa gặp đơn **Misc** nhiều mã nào trên thực địa (57 slip gần nhất chỉ có 1 đơn nhiều mã,
+  và nó là Ground). Nhánh BOL nhiều mã mới chỉ kiểm bằng test và một BOL dựng thử.
 - **Cột N và O chưa đi qua `_ghiText_`** — vẫn dùng `setValue` trần nên có thể bị ép thành số.
   PRO của AACT không có số 0 đầu nên chưa gặp sự cố, carrier khác chưa kiểm.
 - **Slip đơn Ground tích tụ ở `_INBOX` vĩnh viễn** — chúng không bao giờ có folder `PO - <po>` nên
@@ -384,6 +448,22 @@ Cần chốt trước: đọc mail **thay hẳn** Drive, hay **thử mail trư�
   (`11_TaiVe/bol/`). **Chưa khôi phục — chờ người dùng xác nhận cố ý hay vô tình.**
 - **BOL rác `4178975`** (PRO `39004838`) trên hệ thống AACT — cố ý tạo 06/08 để nghiệm thu đường
   Finalize, không xoá được. Đừng tưởng là BOL thật.
+
+### 🟢 BOL trên AACT CHƯA CÓ HIỆU LỰC cho tới khi gửi mail — người dùng chốt 11/08/2026
+
+Finalize trên `aaacooper.com` sinh ra `BOL#` và `PRO#` thật **trong hệ thống AACT**, nhưng
+về mặt nghiệp vụ đơn **chỉ tính khi người dùng gửi mail đi**. Chưa gửi mail thì BOL đó chỉ
+là số nằm không.
+
+**Hệ quả — nới lỏng đáng kể mức rủi ro mà tài liệu cũ đặt ra:**
+- Tạo nhầm/tạo lại BOL AACT **không gây hậu quả với carrier**, chỉ để lại số thừa trong
+  hệ thống của họ. Không phải chuyện phải tránh bằng mọi giá.
+- Đơn đã Finalize vẫn **làm lại được**: xoá `11_TaiVe/aact/<PO>.json` rồi cho chạy lại.
+- Vẫn giữ file `<PO>.json` và thứ tự "Finalize → ghi số ra đĩa ngay": mục đích của nó là
+  **không tạo BOL thứ hai một cách vô ý**, chứ không phải vì BOL thứ hai gây thiệt hại.
+
+⚠️ KHÔNG áp cách hiểu này cho **CTII**: submit ở `centraltransport.com` tạo **lệnh pickup
+thật, xe đến kho** — đó mới là thứ không hoàn tác được.
 - Folder Drive cũ `1ER7RWu-66baF1uvB4AuBByN7OS-FJdAI` (phẳng): để nguyên lưu trữ, không dùng.
 - **Sheet có nhiều người sửa cùng lúc** — luôn lấy danh sách PO ngay trước khi submit.
 

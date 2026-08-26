@@ -31,7 +31,11 @@ const DEDUP = has('--dedup');
 const ONLY = (val('--only') || '').split(',').map(s => s.trim()).filter(Boolean);
 const MAX = parseInt(val('--max') || '0', 10);
 
-const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
+/* Gio VN, giong xu-ly-don/xu-ly-ground/invoice. Truoc 13/08/2026 file nay dung
+ * `toISOString()` = UTC, nen cung mot dong log `dsm-tool.log` co hai mui gio lech
+ * 7 tieng — lo bat dau luc 02:40 chua dong ghi 19:40, doc log ra thu tu sai. */
+const log = (...a) => console.log(
+  new Date().toLocaleTimeString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }), ...a);
 
 async function main() {
   try { await fs.access(STATE); }

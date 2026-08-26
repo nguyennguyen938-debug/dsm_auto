@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Một đơn được xử lý thế nào — hướng dẫn đọc sheet</title>
+<style>*{box-sizing:border-box}html,body{margin:0;padding:0}</style>
+</head>
+<body>
+<style>
+:root{
+  --bg:#E6E7E1; --card:#F4F5F0; --ink:#20221D; --dim:#585C55; --faint:#787C74;
+  --line:#D0D2CA; --line2:#B8BAB1;
+  --ok:#2E6B34; --ok-bg:#E2EDE3;
+  --wait:#8A5A0B; --wait-bg:#F7E9CE;
+  --stop:#A32A22; --stop-bg:#F7E2DF;
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#141414; --card:#1D1D1C; --ink:#F2F2F0; --dim:#B2B2AE; --faint:#8C8C88;
+    --line:#2E2E2C; --line2:#3D3D3A;
+    --ok:#8FC095; --ok-bg:#1B2A1C;
+    --wait:#E0AC5C; --wait-bg:#2C2211;
+    --stop:#E88980; --stop-bg:#2E1715;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141414; --card:#1D1D1C; --ink:#F2F2F0; --dim:#B2B2AE; --faint:#8C8C88;
+  --line:#2E2E2C; --line2:#3D3D3A;
+  --ok:#8FC095; --ok-bg:#1B2A1C;
+  --wait:#E0AC5C; --wait-bg:#2C2211;
+  --stop:#E88980; --stop-bg:#2E1715;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);
+     font-size:18px;line-height:1.75;-webkit-font-smoothing:antialiased}
+.page{max-width:880px;margin:0 auto;padding:0 22px 110px}
+header{padding:64px 0 30px;border-bottom:3px solid var(--ink);margin-bottom:10px}
+.kick{font-size:13.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);
+      margin:0 0 12px;font-weight:650}
+h1{font-size:clamp(30px,5.2vw,42px);line-height:1.16;margin:0 0 16px;font-weight:750;letter-spacing:-.02em}
+.sub{font-size:19.5px;color:var(--dim);margin:0;max-width:56ch}
+h2{font-size:26px;font-weight:750;margin:60px 0 8px;letter-spacing:-.015em;
+   padding-top:28px;border-top:1px solid var(--line)}
+h2:first-of-type{border-top:none;padding-top:6px}
+h3{font-size:19px;font-weight:700;margin:34px 0 6px}
+p{margin:0 0 16px;max-width:66ch}
+.lead{color:var(--dim);margin-bottom:26px}
+strong{font-weight:700}
+code{font-family:var(--mono);font-size:.85em;background:var(--card);border:1px solid var(--line);
+     border-radius:4px;padding:2px 6px;white-space:nowrap}
+
+figure{margin:28px 0 10px}
+figure svg{display:block;width:100%;height:auto;color:var(--ink)}
+figcaption{font-size:16px;color:var(--dim);margin-top:14px}
+
+.tw{overflow-x:auto;margin:24px 0;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:16.5px;min-width:560px;background:var(--card)}
+th,td{text-align:left;padding:13px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:14px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;background:var(--bg)}
+tr:last-child td{border-bottom:none}
+.cell{font-family:var(--mono);font-size:15px;font-weight:600;white-space:nowrap}
+.num{font-family:var(--mono);font-size:.9em;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.pill{display:inline-block;font-size:14px;font-weight:700;padding:3px 10px;border-radius:5px;white-space:nowrap}
+.p-ok{background:var(--ok-bg);color:var(--ok)}
+.p-wait{background:var(--wait-bg);color:var(--wait)}
+.p-stop{background:var(--stop-bg);color:var(--stop)}
+
+.card{border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:0 8px 8px 0;
+      padding:18px 20px;margin:24px 0;background:var(--card)}
+.card .t{font-size:14px;font-weight:750;letter-spacing:.05em;text-transform:uppercase;margin:0 0 8px;color:var(--dim)}
+.card p{margin:0 0 10px;font-size:17px}
+.card p:last-child{margin:0}
+.card.stop{border-left-color:var(--stop)} .card.stop .t{color:var(--stop)}
+.card.ok{border-left-color:var(--ok)} .card.ok .t{color:var(--ok)}
+.card.wait{border-left-color:var(--wait)} .card.wait .t{color:var(--wait)}
+
+ol.chk{counter-reset:c;list-style:none;padding:0;margin:24px 0}
+ol.chk li{counter-increment:c;position:relative;padding:0 0 18px 44px;font-size:17px}
+ol.chk li::before{content:counter(c);position:absolute;left:0;top:2px;width:28px;height:28px;border-radius:50%;
+  background:var(--card);border:2px solid var(--line2);color:var(--dim);font-size:14px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+ol.chk b{display:block}
+ul.pl{padding-left:24px;margin:0 0 16px}
+ul.pl li{margin-bottom:9px}
+footer{margin-top:70px;padding-top:26px;border-top:1px solid var(--line);color:var(--faint);font-size:16px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+#doNen{position:fixed;top:14px;right:14px;z-index:99;display:flex;align-items:center;gap:7px;
+  font-family:var(--ui);font-size:13px;font-weight:600;color:var(--dim);
+  background:var(--card);border:1px solid var(--line2);border-radius:999px;
+  padding:7px 13px;cursor:pointer;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+#doNen:hover{color:var(--ink);border-color:var(--ink)}
+#doNen:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+#doNen svg{width:14px;height:14px;flex:none}
+@media print{#doNen{display:none}}
+</style>
+
+<div class="page">
+
+<header>
+  <p class="kick">Hướng dẫn cho người vận hành · 12/08/2026</p>
+  <h1>Một đơn được xử lý thế nào</h1>
+  <p class="sub">Từ lúc đơn hiện lên sheet cho tới khi xuất hoá đơn. Đọc xong bạn sẽ nhìn một dòng trong sheet là biết đơn đang ở đâu, máy đang làm gì, và khi nào cần bạn ra tay.</p>
+</header>
+
+<h2>Câu chuyện của một đơn</h2>
+<p class="lead">Giả sử sáng nay có một đơn mới. Bạn mở sheet và thấy <strong>cột A có ngày, cột B có số PO</strong>, các cột còn lại trống trơn. Từ đây máy sẽ tự làm những việc sau.</p>
+
+<figure>
+<svg viewBox="0 0 840 1180" role="img" aria-label="Sơ đồ dọc mô tả một đơn đi qua sáu bước: đơn hiện lên sheet, máy tải phiếu giao hàng, máy đọc phiếu và phân loại, làm giấy tờ hoặc nhãn gửi hàng, số vận đơn về, xuất hoá đơn. Cột bên phải cho biết nhìn vào sheet thấy gì ở mỗi bước.">
+  <defs>
+    <marker id="u-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/></marker>
+  </defs>
+  <g font-family="system-ui, sans-serif" fill="currentColor">
+
+    <text x="24" y="26" font-size="13" font-weight="700" letter-spacing="1.2" opacity=".55">MÁY LÀM GÌ</text>
+    <text x="512" y="26" font-size="13" font-weight="700" letter-spacing="1.2" opacity=".55">BẠN THẤY GÌ TRÊN SHEET</text>
+    <line x1="24" y1="38" x2="816" y2="38" stroke="currentColor" stroke-width="1" opacity=".25"/>
+
+    <rect x="24" y="56" width="440" height="74" rx="9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <text x="46" y="86" font-size="16.5" font-weight="700">1 · Đơn hiện lên sheet</text>
+    <text x="46" y="110" font-size="14" opacity=".75">máy đọc mail báo đơn, cứ 10 phút một lần</text>
+    <rect x="500" y="56" width="316" height="74" rx="9" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="520" y="86" font-size="15" font-weight="650">Cột A và B có nội dung</text>
+    <text x="520" y="110" font-size="14" opacity=".75">các cột khác còn trống</text>
+    <line x1="244" y1="130" x2="244" y2="162" stroke="currentColor" stroke-width="1.8" marker-end="url(#u-a)"/>
+
+    <rect x="24" y="168" width="440" height="74" rx="9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <text x="46" y="198" font-size="16.5" font-weight="700">2 · Máy lấy phiếu giao hàng</text>
+    <text x="46" y="222" font-size="14" opacity=".75">tải từ hệ thống Home Depot, cứ 5 phút một lần</text>
+    <rect x="500" y="168" width="316" height="74" rx="9" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="520" y="198" font-size="15" font-weight="650">Chưa thấy gì đổi</text>
+    <text x="520" y="222" font-size="14" opacity=".75">phiếu được lưu vào Drive</text>
+    <line x1="244" y1="242" x2="244" y2="274" stroke="currentColor" stroke-width="1.8" marker-end="url(#u-a)"/>
+
+    <rect x="24" y="280" width="440" height="74" rx="9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <text x="46" y="310" font-size="16.5" font-weight="700">3 · Máy đọc phiếu, phân loại</text>
+    <text x="46" y="334" font-size="14" opacity=".75">xem hàng lấy ở kho nào, đi bằng xe tải hay chuyển phát</text>
+    <rect x="500" y="280" width="316" height="74" rx="9" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="520" y="310" font-size="15" font-weight="650">Cột E đến I được điền</text>
+    <text x="520" y="334" font-size="14" opacity=".75">khách, mã hàng, số lượng</text>
+
+    <path d="M 244 354 L 244 384 L 130 384 L 130 414" fill="none" stroke="currentColor" stroke-width="1.8" marker-end="url(#u-a)"/>
+    <path d="M 244 354 L 244 384 L 360 384 L 360 414" fill="none" stroke="currentColor" stroke-width="1.8" marker-end="url(#u-a)"/>
+
+    <rect x="24" y="420" width="212" height="96" rx="9" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.6"/>
+    <text x="130" y="450" text-anchor="middle" font-size="16" font-weight="700">Hàng đi xe tải</text>
+    <text x="130" y="472" text-anchor="middle" font-size="13.5" opacity=".75">máy làm giấy vận chuyển</text>
+    <text x="130" y="492" text-anchor="middle" font-size="13.5" opacity=".75">(BOL) và lưu vào Drive</text>
+
+    <rect x="252" y="420" width="212" height="96" rx="9" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.6"/>
+    <text x="358" y="450" text-anchor="middle" font-size="16" font-weight="700">Hàng chuyển phát</text>
+    <text x="358" y="472" text-anchor="middle" font-size="13.5" opacity=".75">máy mua nhãn UPS và</text>
+    <text x="358" y="492" text-anchor="middle" font-size="13.5" opacity=".75">báo kho soạn hàng</text>
+
+    <rect x="500" y="420" width="316" height="96" rx="9" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="520" y="450" font-size="15" font-weight="650">Cột C có chữ</text>
+    <text x="520" y="472" font-size="14" opacity=".75">xe tải → chữ NULL (chờ bạn chọn hãng)</text>
+    <text x="520" y="494" font-size="14" opacity=".75">chuyển phát → chữ UPS</text>
+
+    <path d="M 130 516 L 130 552 L 244 552 L 244 578" fill="none" stroke="currentColor" stroke-width="1.8" marker-end="url(#u-a)"/>
+    <path d="M 358 516 L 358 552 L 244 552" fill="none" stroke="currentColor" stroke-width="1.8"/>
+
+    <rect x="24" y="584" width="440" height="74" rx="9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <text x="46" y="614" font-size="16.5" font-weight="700">4 · Giấy tờ lên Drive</text>
+    <text x="46" y="638" font-size="14" opacity=".75">mỗi đơn một thư mục riêng, xếp theo ngày hẹn xe</text>
+    <rect x="500" y="584" width="316" height="74" rx="9" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="520" y="608" font-size="15" font-weight="650">Cột J có chữ X · cột K có ngày</text>
+    <text x="520" y="632" font-size="14" opacity=".75">cột P có đường dẫn thư mục</text>
+    <line x1="244" y1="658" x2="244" y2="690" stroke="currentColor" stroke-width="1.8" marker-end="url(#u-a)"/>
+
+    <rect x="24" y="696" width="440" height="74" rx="9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <text x="46" y="726" font-size="16.5" font-weight="700">5 · Đơn được chép sang sheet riêng</text>
+    <text x="46" y="750" font-size="14" opacity=".75">sang sheet B2B hoặc B2C, cứ 15 phút một lần</text>
+    <rect x="500" y="696" width="316" height="74" rx="9" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="520" y="726" font-size="15" font-weight="650">Đơn xuất hiện ở sheet con</text>
+    <text x="520" y="750" font-size="14" opacity=".75">B2B hoặc B2C tuỳ loại hàng</text>
+    <line x1="244" y1="770" x2="244" y2="802" stroke="currentColor" stroke-width="1.8" marker-end="url(#u-a)"/>
+
+    <rect x="24" y="808" width="440" height="74" rx="9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <text x="46" y="838" font-size="16.5" font-weight="700">6 · Số vận đơn về</text>
+    <text x="46" y="862" font-size="14" opacity=".75">hàng chuyển phát có ngay; xe tải thì chờ hãng báo</text>
+    <rect x="500" y="808" width="316" height="74" rx="9" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="520" y="838" font-size="15" font-weight="650">Cột N có số</text>
+    <text x="520" y="862" font-size="14" opacity=".75">nhiều kiện thì nhiều dòng số</text>
+    <line x1="244" y1="882" x2="244" y2="914" stroke="currentColor" stroke-width="1.8" marker-end="url(#u-a)"/>
+
+    <rect x="24" y="920" width="440" height="74" rx="9" style="fill:var(--stop-bg);stroke:var(--stop)" stroke-width="1.8"/>
+    <text x="46" y="950" font-size="16.5" font-weight="700" style="fill:var(--stop)">7 · Xuất hoá đơn</text>
+    <text x="46" y="974" font-size="14" style="fill:var(--stop)" opacity=".85">chạy tay · gửi rồi KHÔNG sửa được</text>
+    <rect x="500" y="920" width="316" height="74" rx="9" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="520" y="950" font-size="15" font-weight="650">Đơn rời khỏi danh sách</text>
+    <text x="520" y="974" font-size="14" opacity=".75">“Needs Invoicing” trên hệ thống</text>
+
+    <line x1="24" y1="1030" x2="816" y2="1030" stroke="currentColor" stroke-width="1" opacity=".25"/>
+    <text x="24" y="1062" font-size="13" font-weight="700" letter-spacing="1.2" opacity=".55">CÓ MỘT NHÁNH THỨ BA</text>
+    <rect x="24" y="1078" width="440" height="74" rx="9" style="fill:var(--wait-bg);stroke:var(--wait)" stroke-width="1.8"/>
+    <text x="46" y="1108" font-size="16.5" font-weight="700" style="fill:var(--wait)">Đơn có cả hai loại hàng</text>
+    <text x="46" y="1132" font-size="14" style="fill:var(--wait)" opacity=".85">máy chỉ đánh dấu rồi dừng, chờ xử lý riêng</text>
+    <rect x="500" y="1078" width="316" height="74" rx="9" style="fill:var(--card);stroke:var(--line2)" stroke-width="1.5"/>
+    <text x="520" y="1108" font-size="15" font-weight="650">Cột T có chữ X</text>
+    <text x="520" y="1132" font-size="14" opacity=".75">đơn hiện ở CẢ HAI sheet con</text>
+  </g>
+</svg>
+<figcaption>Cột trái là việc máy làm, cột phải là dấu hiệu bạn nhìn thấy được trên sheet. Nếu một dấu hiệu không xuất hiện sau khoảng thời gian ghi trong bước đó, đơn đang mắc ở đâu đó.</figcaption>
+</figure>
+
+<h2>Nhìn vào sheet, biết đơn đang ở đâu</h2>
+<p class="lead">Đây là bảng tra chính. Chỉ cần nhìn <strong>cột C</strong> là biết phần lớn câu chuyện.</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>Cột C ghi gì</th><th>Nghĩa là</th><th>Bạn cần làm gì</th></tr></thead>
+<tbody>
+<tr><td class="cell">(trống)</td><td>Máy chưa xử lý. Bình thường chỉ trống vài phút.</td><td><span class="pill p-ok">Chờ</span> quá 30 phút vẫn trống thì xem mục “Khi nào đơn bị kẹt”.</td></tr>
+<tr><td class="cell">NULL</td><td>Máy đã làm xong giấy vận chuyển. Ô hãng trên giấy <strong>để trống</strong> vì khâu chọn hãng đang tạm ngưng.</td><td><span class="pill p-wait">Bạn chọn hãng</span> rồi điền vào giấy và gửi mail.</td></tr>
+<tr><td class="cell">UPS</td><td>Đơn đi chuyển phát. Máy đã ghi nhận, đang chờ mua nhãn.</td><td><span class="pill p-ok">Chờ</span> — nhãn về thì cột N có số.</td></tr>
+<tr><td class="cell">AACT · SEFL · XGSI …</td><td>Có <strong>người</strong> đã nhận đơn và tự điền tên hãng.</td><td><span class="pill p-stop">Máy không đụng nữa</span> — người đó phải làm nốt.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Các cột khác</h3>
+<div class="tw">
+<table>
+<thead><tr><th>Cột</th><th>Có nội dung nghĩa là</th></tr></thead>
+<tbody>
+<tr><td class="cell">D — PIC</td><td>Có người nhận đơn này. <strong>Máy sẽ bỏ qua hoàn toàn</strong>, kể cả khi mọi thứ khác còn trống. Đây là cách bạn “giành” một đơn về làm tay.</td></tr>
+<tr><td class="cell">E → I</td><td>Máy đã đọc được phiếu giao hàng: tên khách, mã hàng, số lượng.</td></tr>
+<tr><td class="cell">J</td><td>Giấy tờ đã có trên Drive. Đơn chuyển phát chưa mua nhãn thì ô này còn trống.</td></tr>
+<tr><td class="cell">K</td><td>Ngày hẹn xe tới lấy hàng. Mỗi ngày tối đa 20 đơn; đầy thì máy tự đẩy sang ngày làm việc kế.</td></tr>
+<tr><td class="cell">N</td><td>Số vận đơn. Đơn nhiều kiện thì mỗi kiện một dòng trong cùng ô.</td></tr>
+<tr><td class="cell">P</td><td>Đường dẫn tới thư mục Drive của đơn.</td></tr>
+<tr><td class="cell">T</td><td>Đơn có <strong>cả hai loại hàng</strong> — vừa hàng xe tải vừa hàng chuyển phát. Máy chỉ đánh dấu, không xử lý.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>Máy phân loại hàng theo quy tắc nào</h2>
+<p class="lead">Máy xét <strong>từng dòng hàng</strong> trên phiếu, không xét cả đơn. Quy tắc theo thứ tự, gặp cái nào đúng thì dừng ở đó.</p>
+
+<ol class="chk">
+<li><b>Bốn mã hàng luôn thuộc nhóm xe tải</b>
+<code>836390</code> · <code>836390-B</code> · <code>838390</code> · <code>838390-B</code> — hàng để ở kho Calhoun. Đúng bốn mã này, viết y hệt, có gạch <code>-B</code> hay không là hai mã khác nhau.</li>
+
+<li><b>Bốn mã ưu tiên chuyển phát, nhưng hết hàng thì đổi</b>
+<code>838250</code> · <code>838250-B</code> · <code>818250</code> · <code>818250-B</code>. Máy hỏi kho Lecangs còn đủ hàng không: <strong>còn</strong> thì đi chuyển phát, <strong>hết</strong> thì chuyển sang nhóm xe tải.</li>
+
+<li><b>Mọi mã còn lại — theo phiếu ghi</b>
+Phiếu ghi <em>Ground</em> thì chuyển phát, ghi <em>Misc</em> thì xe tải.</li>
+</ol>
+
+<div class="card ok">
+  <p class="t">Ngoại lệ đứng trên tất cả: Alaska và Hawaii</p>
+  <p>Đơn giao tới <strong>AK</strong> hoặc <strong>HI</strong> luôn đi <strong>nhóm xe tải</strong>, bất kể mã hàng là gì và phiếu ghi gì. Cột C sẽ ghi <code>NULL</code> như mọi đơn xe tải khác, và ô hãng trên giấy vận chuyển để trống.</p>
+  <p>Lý do: bảng kho và bảng hãng vận chuyển đều chỉ phủ 48 bang lục địa. Trước đây đơn đi hai bang này bị kẹt vô thời hạn; nay chúng đi đường quen thuộc và chờ bạn chọn hãng.</p>
+</div>
+
+<div class="card wait">
+  <p class="t">Điều này có nghĩa gì với bạn</p>
+  <p>Cùng một mã hàng có thể đi hai đường khác nhau vào hai ngày khác nhau, <strong>tuỳ kho còn hàng hay không</strong>. Nếu bạn thấy hôm nay một đơn đi chuyển phát mà tuần trước đơn giống hệt lại đi xe tải, đó không phải lỗi.</p>
+  <p>Khi máy <strong>không hỏi được kho</strong> (mất kết nối), nó mặc định cho đi chuyển phát — vì đó là đường thường ngày của bốn mã đó.</p>
+</div>
+
+<h3>Khi một phiếu có nhiều mã hàng</h3>
+<p>Máy xử lý được, nhưng hai đường làm theo hai cách khác hẳn nhau — biết cách nào thì nhìn sheet là hiểu ngay vì sao các ô có nhiều dòng.</p>
+<ul class="pl">
+<li><strong>Hàng chuyển phát</strong> — mỗi mã một kiện riêng, mỗi kiện một nhãn và một số vận đơn. Cột G, I và N sẽ có <strong>nhiều dòng</strong> trong cùng một ô.</li>
+<li><strong>Hàng xe tải</strong> — các tấm xếp chồng lên <strong>một pallet chung</strong>. Giấy vận chuyển ghi một kiện xếp, cân nặng cộng gộp, và mỗi mã một dòng mô tả.</li>
+</ul>
+<div class="card ok">
+  <p class="t">Ví dụ — cùng một đơn, hai đường tính khác nhau</p>
+  <p>Tấm 8 ft (86 lb) + tấm đảo bếp 6 ft (101 lb):</p>
+  <p><strong>Đi xe tải</strong> → một pallet, <span class="num">86 + 101 + 55 = 242 lb</span>, hạng cước 92.5. Cộng 55 lb tiền pallet <em>một lần</em>, vì chỉ có một pallet.</p>
+  <p><strong>Đi chuyển phát</strong> → hai kiện riêng, mỗi kiện cân nặng của chính nó, hai nhãn, hai số vận đơn.</p>
+</div>
+<div class="card wait">
+  <p class="t">Điều đáng để mắt</p>
+  <p>Với hàng xe tải, kích thước ghi trên giấy lấy <strong>chiều lớn nhất</strong> của các tấm — pallet phải bao được tấm rộng nhất. Đây là chỗ dễ sai mà con số vẫn trông hợp lý: lấy nhầm kích thước của tấm đầu tiên sẽ ra hạng cước 70 thay vì 92.5.</p>
+  <p>Đơn nhiều mã đi <strong>chuyển phát</strong> thì một kho phải có đủ tất cả các mã. Không kho nào đủ cả thì máy <strong>tách thành nhiều lần gửi</strong>, mỗi lần một kho. Chỉ khi có một mã mà không kho nào đủ thì đơn mới dừng — xem lý do 3 ở phần sau.</p>
+</div>
+
+<h2>Khi nào đơn bị kẹt, và vì sao</h2>
+<p class="lead">Máy được lập trình để <strong>dừng lại thay vì đoán</strong>. Khi thiếu một thông tin nào đó, nó thà để đơn nằm im còn hơn làm ra giấy tờ sai — vì giấy tờ sai thì mọi thứ vẫn khớp nhau, chỉ có hàng là sai, và không ai phát hiện cho tới khi hàng tới nơi.</p>
+
+<p>Đơn kẹt luôn có cùng một dấu hiệu: <strong>cột A và B có nội dung, cột C trống</strong>, và nó ở nguyên như thế. Dưới đây là bốn lý do, kèm ví dụ thật.</p>
+
+<h3>1 · Mã hàng chưa có trong bảng cân nặng</h3>
+<p>Để làm giấy vận chuyển, máy cần biết một tấm nặng bao nhiêu. Bảng cân nặng hiện chỉ có <strong>10 mã</strong>:</p>
+<p><code>810250</code> <code>812250</code> <code>816390</code> <code>818250</code> <code>818390</code> <code>830250</code> <code>832250</code> <code>836390</code> <code>838250</code> <code>838390</code></p>
+<div class="card">
+  <p class="t">Ví dụ</p>
+  <p>Đơn có mã <code>833250</code> hoặc <code>814300</code> mà đi bằng <strong>xe tải</strong> sẽ kẹt — hai mã này không nằm trong bảng trên. Máy không biết ghi bao nhiêu ký vào giấy nên dừng.</p>
+  <p>Nhưng cũng hai mã đó đi <strong>chuyển phát</strong> thì chạy bình thường, vì đường chuyển phát dùng một bảng khác đầy đủ hơn (524 mã).</p>
+</div>
+
+<h3>2 · Số lượng trên phiếu lệch với hệ thống</h3>
+<p>Máy so số lượng in trên phiếu với số Home Depot đặt. Lệch là dừng ngay.</p>
+<div class="card stop">
+  <p class="t">Ví dụ có thật — đây là lý do quy tắc này ra đời</p>
+  <p>Đơn <code>81827440</code>: Home Depot đặt <strong>2 tấm</strong>, nhưng phiếu in ra ghi <strong>1</strong>. Giấy vận chuyển làm theo phiếu nên ghi <strong>183 ký</strong> thay vì <strong>311 ký</strong>, và hạng cước cũng sai theo.</p>
+  <p>Nguy hiểm ở chỗ: mọi giấy tờ đều <em>khớp nhau</em>, hãng vận chuyển không thắc mắc, chỉ có kho là giao thiếu một tấm. Năm đơn đã bị như vậy trước khi phát hiện.</p>
+</div>
+
+<h3>3 · Không kho nào còn đủ hàng</h3>
+<p>Với hàng chuyển phát, máy hỏi từng kho xem còn đủ số lượng không. Nó <strong>không</strong> chọn bừa một kho.</p>
+<p>Với đơn nhiều mã, máy ưu tiên tìm <strong>một kho có đủ tất cả</strong> — khách nhận một lần là tốt nhất. Không có kho nào như vậy thì nó <strong>tách thành nhiều lần gửi</strong>, mỗi lần một kho, cùng số PO. Chỉ khi có một mã mà <em>không kho nào</em> đủ thì đơn mới dừng.</p>
+<div class="card">
+  <p class="t">Ví dụ</p>
+  <p>Mã <code>814300</code> chỉ có ở hai kho: <strong>CAP</strong> còn 52 cái, <strong>NJF02</strong> còn 6. Bốn kho gần hơn không có cái nào.</p>
+  <p>Nếu một đơn cần 8 cái mà đơn khác vừa lấy hết ở CAP, máy sẽ dừng thay vì in nhãn cho một kho không có hàng — vì lỗi đó chỉ lộ ra khi hàng không tới tay khách.</p>
+  <p>Máy cũng <strong>không xé nhỏ một mã ra hai kho</strong> — không lấy 5 cái ở kho này, 3 cái ở kho kia. Mỗi mã đi trọn vẹn từ một kho.</p>
+</div>
+
+<h3>4 · Mất kết nối</h3>
+<p>Hai kết nối có thể đứt, và hậu quả khác nhau:</p>
+<ul class="pl">
+<li><strong>Mất kết nối tới Home Depot</strong> — không lấy được phiếu giao hàng. Cả loạt đơn cùng đứng, không riêng một đơn. Cần đăng nhập lại.</li>
+<li><strong>Mất kết nối tới kho Lecangs</strong> — không hỏi được tồn kho. Đơn vẫn chạy, nhưng bốn mã đặc biệt sẽ mặc định đi chuyển phát thay vì được kiểm tra thật. Nhãn chuyển phát cũng không mua được.</li>
+</ul>
+
+<div class="card stop">
+  <p class="t">Quan trọng: đơn kẹt không tự báo</p>
+  <p>Không có chuông báo nào. Cách duy nhất phát hiện là <strong>nhìn sheet</strong>: đơn nào có cột A, B mà cột C trống quá lâu thì đang mắc.</p>
+  <p>Cột C bình thường được điền trong vòng vài phút. Quá <strong>30 phút</strong> mà vẫn trống thì gần như chắc chắn đơn đã kẹt.</p>
+</div>
+
+<h2>Năm việc máy làm mà không lấy lại được</h2>
+<p class="lead">Hầu hết mọi thứ máy làm đều sửa được: xoá tệp, sửa dòng, chạy lại. Nhưng năm việc dưới đây tạo ra hậu quả thật bên ngoài.</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>Việc</th><th>Nếu làm hai lần thì sao</th></tr></thead>
+<tbody>
+<tr><td>Xin in lại phiếu giao hàng</td><td>Hệ thống Home Depot nhận hai lệnh in</td></tr>
+<tr><td>Chốt giấy vận chuyển trên trang hãng</td><td>Sinh ra hai số vận đơn cho một đơn</td></tr>
+<tr><td>Mua nhãn chuyển phát</td><td>Hai nhãn cùng hiệu lực — hàng có thể đi hai lần</td></tr>
+<tr><td>Báo kho soạn hàng</td><td>Kho soạn hai lần cho một đơn</td></tr>
+<tr><td>Gửi hoá đơn</td><td>Home Depot nhận hai hoá đơn cho một đơn</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="card ok">
+  <p class="t">Máy tự bảo vệ thế nào</p>
+  <p>Ngay khi làm xong một trong năm việc trên, máy <strong>ghi lại một tệp bằng chứng</strong> trước khi làm bất cứ việc gì khác. Lần chạy sau đọc thấy tệp đó thì dùng lại kết quả cũ thay vì làm lại.</p>
+  <p>Nhờ vậy, chạy lại một đơn đã xong <strong>không</strong> sinh ra vận đơn thứ hai. Bạn có thể yên tâm yêu cầu chạy lại khi nghi ngờ.</p>
+</div>
+
+<h2>Bảng kiểm nhanh mỗi ngày</h2>
+<ol class="chk">
+<li><b>Có đơn nào cột A, B đầy mà cột C trống quá 30 phút không?</b>
+Nếu có, xem phần “Khi nào đơn bị kẹt” — bốn lý do đều có ví dụ.</li>
+
+<li><b>Đơn nào cột C ghi NULL?</b>
+Đó là đơn chờ bạn chọn hãng vận chuyển và gửi mail. Máy đã làm xong phần giấy tờ.</li>
+
+<li><b>Đơn nào cột C ghi UPS mà cột N trống quá lâu?</b>
+Nhãn chưa mua được — thường do mất kết nối tới kho Lecangs.</li>
+
+<li><b>Đơn nào có chữ X ở cột T?</b>
+Đơn cần cả hai luồng. Kiểm ở cả sheet B2B và B2C xem mỗi bên đã xong phần của mình chưa.</li>
+
+<li><b>Có đơn nào bạn muốn tự làm không?</b>
+Điền tên bạn vào <strong>cột D</strong>. Máy sẽ bỏ qua đơn đó hoàn toàn, ngay lập tức.</li>
+</ol>
+
+<div class="card">
+  <p class="t">Một câu để nhớ</p>
+  <p><strong>Cột D là công tắc tắt của bạn.</strong> Điền tên vào đó là máy dừng tay với đơn đó. Không cần báo ai, không cần chờ.</p>
+</div>
+
+<footer>
+  <p>Trang này mô tả cách hệ thống đang chạy ngày 12/08/2026. Mốc thời gian: đơn mới về sheet mỗi 10 phút · lấy phiếu và làm giấy tờ mỗi 5 phút · chép sang sheet con và lấy số vận đơn mỗi 15 phút. Việc mua nhãn chuyển phát và xuất hoá đơn hiện <strong>chạy tay</strong>, chưa tự động.</p>
+</footer>
+
+</div>
+
+<button id="doNen" type="button" aria-label="Đổi nền sáng hoặc tối">
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+    <circle cx="8" cy="8" r="5"/><path d="M8 3v10" stroke-linecap="round"/><path d="M8 3a5 5 0 010 10z" fill="currentColor" stroke="none"/>
+  </svg><span id="doNenChu">Nền</span>
+</button>
+<script>
+(function(){
+  var r = document.documentElement, b = document.getElementById('doNen'), c = document.getElementById('doNenChu');
+  function heThong(){ return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+  function ve(){ c.textContent = (r.dataset.theme || heThong()) === 'dark' ? 'Nền tối' : 'Nền sáng'; }
+  try { var l = localStorage.getItem('dsm-nen'); if (l === 'dark' || l === 'light') r.dataset.theme = l; } catch (e) {}
+  ve();
+  b.addEventListener('click', function(){
+    var moi = (r.dataset.theme || heThong()) === 'dark' ? 'light' : 'dark';
+    r.dataset.theme = moi;
+    try { localStorage.setItem('dsm-nen', moi); } catch (e) {}
+    ve();
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ve);
+})();
+</script>
+</body>
+</html>

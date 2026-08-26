@@ -18,7 +18,14 @@
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import fs from 'node:fs/promises';
 
-/** Bang hợp lệ — đúng 49 mã trong carrier.csv. AK/HI CỐ Ý không có: gặp thì phải hỏi người. */
+/**
+ * Đúng 49 mã bang có trong `carrier.csv`. **AK/HI cố ý không có** — bảng tra hãng chỉ
+ * phủ 48 bang lục địa.
+ *
+ * ⚠️ Từ 11/08/2026 đây **không còn là cổng chặn khi đọc slip**. Đơn AK/HI vẫn đọc,
+ * vẫn dựng BOL, carrier để `NULL`, vào sheet B2B. Danh sách này giờ chỉ dùng để tra
+ * cứu; nơi thật sự chặn là `chonCarrier()`.
+ */
 export const BANG_HOP_LE = new Set(('AL AR AZ CO CT DC DE FL GA IA ID IL IN KS KY LA MA MD ME MI MN MO MS MT ' +
   'NC ND NE NH NJ NM NV NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY CA').split(' '));
 
@@ -79,22 +86,84 @@ function nhieuManhTrongBang(items, lb) {
   return gan.filter(i => Math.abs(i.y - yGoc) <= 3).sort((a, b) => a.x - b.x).map(i => i.s).join(' ');
 }
 
+/**
+ * Đọc TẤT CẢ dòng hàng trong bảng packing slip.
+ *
+ * 🔴 CẤU TRÚC (khảo sát 11/08/2026 trên PO 81944554 — slip 2 SKU đầu tiên gặp được):
+ *    Trang xoay 90°, nên **mỗi dòng hàng là một cột `x` riêng**, còn các trường trong
+ *    cùng một dòng thì phân biệt bằng `y`:
+ *
+ *      nhãn   x=299 : "Model Number" y=25 · "Internet Number" y=106 · "Qty Shipped" y=375
+ *      hàng 1 x=312 : 816390-B y=27 · 700212850 y=106 · mô tả y=192 · qty "1" y=398
+ *      hàng 2 x=334 : 818250-B y=27 · 700190524 y=106 · mô tả y=192 · qty "1" y=398
+ *
+ *    Bộ lọc cũ `giaTriTrongBang()` giới hạn `x < lb.x + 30` nên chỉ thấy hàng 1 và
+ *    bỏ im lặng hàng 2 -> đơn 2 SKU chỉ được tạo MỘT shipping label, SKU kia không
+ *    gửi được mà giấy tờ vẫn khớp nhau.
+ *
+ *    Mô tả trải tiếp theo trục x ("...Top -" ở x=312, "6ft x 39in" ở x=324), nên ranh
+ *    giới giữa hai dòng hàng lấy theo **x của mã model kế tiếp**, không lấy theo y.
+ *
+ * ⚠️ Có HAI nhãn "Model Number": bảng packing slip (kèm "Qty Shipped") và bảng return
+ *    (kèm "Qty Returned"). Neo theo `Qty Shipped` để chắc lấy đúng bảng.
+ */
+function docDongHang(items) {
+  const lbQty = items.filter(i => i.s === 'Qty Shipped');
+  if (lbQty.length !== 1) throw new Error(`nhan "Qty Shipped": thay ${lbQty.length} cho, mong doi 1`);
+  const xNhan = lbQty[0].x;
+
+  const lbModel = items.filter(i => i.s === 'Model Number' && Math.abs(i.x - xNhan) <= 2);
+  if (lbModel.length !== 1) throw new Error(`nhan "Model Number" cung cot voi "Qty Shipped": thay ${lbModel.length}`);
+  const lbDesc = items.filter(i => i.s === 'Item Description' && Math.abs(i.x - xNhan) <= 2)[0] || null;
+
+  // Mã model: cùng hàng y với nhãn Model Number, nằm bên phải nhãn. Mỗi x = một dòng hàng.
+  /* Lọc theo DẠNG mã hàng, không chỉ theo toạ độ: cuối trang còn dòng "PO # 81899773"
+   * nằm gần cùng hàng y với nhãn, và nó lọt vào nếu chỉ lọc bằng x/y (gặp 11/08). */
+  const laMaHang = t => /^\d{5,7}(?:-[A-Z0-9]{1,4})?$/.test(String(t).trim());
+  const moc = items
+    .filter(i => i.x > xNhan + 2 && Math.abs(i.y - lbModel[0].y) <= 6 && laMaHang(i.s))
+    .sort((a, b) => a.x - b.x);
+  if (!moc.length) throw new Error('khong doc duoc Model Number nao trong bang');
+
+  const ra = [];
+  for (let k = 0; k < moc.length; k++) {
+    const xTu = moc[k].x;
+    const xDen = k + 1 < moc.length ? moc[k + 1].x : Infinity;   // ranh giới = dòng kế tiếp
+    const trong = items.filter(i => i.x >= xTu && i.x < xDen);
+
+    const oQty = trong
+      .filter(i => i.y > lbQty[0].y && /^\d+$/.test(i.s))
+      .sort((a, b) => Math.abs(a.y - lbQty[0].y) - Math.abs(b.y - lbQty[0].y))[0];
+    if (!oQty) throw new Error(`dong hang "${moc[k].s}": khong doc duoc Qty Shipped`);
+    const qty = parseInt(oQty.s, 10);
+    if (!Number.isInteger(qty) || qty < 1) throw new Error(`dong hang "${moc[k].s}": Qty "${oQty.s}" khong hop le`);
+
+    let moTa = null;
+    if (lbDesc) {
+      const gan = trong.filter(i => Math.abs(i.y - lbDesc.y) <= 6).sort((a, b) => a.x - b.x);
+      if (gan.length) moTa = gan.map(i => i.s).join(' ');
+    }
+    ra.push({ model: moc[k].s, qty, moTa });
+  }
+  return ra;
+}
+
 export async function docSlip(duongDan) {
-  const items = await docItems(duongDan);
+  const items0 = await docItems(duongDan);
 
   // ---- khối đầu: nhãn và giá trị khớp theo cột x -------------------------
-  const customerOrder = giaTriTheoCot(items, nhan(items, 'Customer Order #:'));
-  const po            = giaTriTheoCot(items, nhan(items, 'Purchase Order #:'));
-  const ngay          = giaTriTheoCot(items, nhan(items, 'Date:'));
-  const shipVia       = giaTriTheoCot(items, nhan(items, 'Ship Via:'));
+  const customerOrder = giaTriTheoCot(items0, nhan(items0, 'Customer Order #:'));
+  const po            = giaTriTheoCot(items0, nhan(items0, 'Purchase Order #:'));
+  const ngay          = giaTriTheoCot(items0, nhan(items0, 'Date:'));
+  const shipVia       = giaTriTheoCot(items0, nhan(items0, 'Ship Via:'));
   let addressType = null;
-  try { addressType = giaTriTheoCot(items, nhan(items, 'Address Type:')); } catch { /* khong phai slip nao cung co */ }
+  try { addressType = giaTriTheoCot(items0, nhan(items0, 'Address Type:')); } catch { /* khong phai slip nao cung co */ }
 
   if (!/^\d{8}$/.test(po)) throw new Error(`PO "${po}" khong phai 8 chu so`);
 
   // Đối chiếu chéo: PO và Customer Order còn xuất hiện lần nữa ở cuối trang.
   // Hai chỗ lệch nhau = đọc sai cột -> dừng, đừng tin chỗ nào.
-  const duoi = items.map(i => i.s).join(' | ');
+  const duoi = items0.map(i => i.s).join(' | ');
   const poDuoi = duoi.match(/PO #\s*(\d{8})/);
   if (poDuoi && poDuoi[1] !== po) throw new Error(`PO khong khop: dau trang "${po}", cuoi trang "${poDuoi[1]}"`);
   const coDuoi = duoi.match(/Customer Order #:\s*(WH\d+)/);
@@ -109,15 +178,15 @@ export async function docSlip(duongDan) {
   else throw new Error(`Ship Via la "${shipVia}" — chua tung gap, khong doan`);
 
   // ---- Ship To: tách theo x, KHÔNG gom theo y -----------------------------
-  const lbOrderedBy = nhan(items, 'Ordered By:');
-  const lbShipTo    = nhan(items, 'Ship To:');
-  const dongShipTo = items
+  const lbOrderedBy = nhan(items0, 'Ordered By:');
+  const lbShipTo    = nhan(items0, 'Ship To:');
+  const dongShipTo = items0
     .filter(i => Math.abs(i.y - lbShipTo.y) <= 4 && i.x > lbShipTo.x)
     .sort((a, b) => a.x - b.x)
     .map(i => i.s);
   if (dongShipTo.length < 4) throw new Error(`khoi Ship To chi co ${dongShipTo.length} dong, mong doi >= 4`);
 
-  const orderedBy = items
+  const orderedBy = items0
     .filter(i => Math.abs(i.y - lbOrderedBy.y) <= 4 && i.x > lbOrderedBy.x && i.x < lbShipTo.x)
     .sort((a, b) => a.x - b.x).map(i => i.s)[0] || null;
 
@@ -135,43 +204,24 @@ export async function docSlip(duongDan) {
   const phone = conLai.slice(iCsz + 1).find(d => /\d{3}.*\d{4}/.test(d)) || null;
 
   if (!diaChi) throw new Error('khong thay dong dia chi duong pho');
-  if (!BANG_HOP_LE.has(bang)) throw new Error(`bang "${bang}" khong co trong carrier.csv — DUNG, hoi nguoi dung`);
+  /* 🔄 11/08/2026: KHÔNG chặn AK/HI ở đây nữa — người dùng chốt hai bang này vẫn xử lý
+   * bình thường, carrier để `NULL`, đơn vào sheet B2B như mọi đơn Misc khác.
+   *
+   * Chốt chặn cũ nằm sai chỗ: nó bắt ở khâu ĐỌC SLIP, trong khi thứ duy nhất cần
+   * `carrier.csv` là khâu CHỌN HÃNG — khâu đang tạm ngưng. Hệ quả là đơn Hilo HI
+   * (`53579205`) không dựng được BOL dù mọi dữ liệu cần cho BOL đều đọc ra đủ.
+   * Kiểm tra vẫn còn nguyên ở `chonCarrier()`, nên nếu bật lại luồng chọn hãng
+   * (`NGUNG_CHON_CARRIER_B2B = false`) thì AK/HI lại dừng và hỏi như cũ. */
+  if (!/^[A-Z]{2}$/.test(bang)) throw new Error(`ma bang "${bang}" khong hop le — doc slip sai?`);
 
-  // ---- mặt hàng ----------------------------------------------------------
-  // Nhiều SKU: CHƯA CÓ MẪU THẬT nào để kiểm. Phát hiện thì dừng, không đoán —
-  // đọc sót một dòng SKU nghĩa là BOL ghi thiếu cân.
-  // "Model Number" xuất hiện 2 lần (phần trả hàng + phần packing slip).
-  // Cả hai phải cho CÙNG một mã — lệch nghĩa là đọc nhầm cột, dừng ngay.
-  const lbModel = items.filter(i => i.s === 'Model Number');
-  if (!lbModel.length) throw new Error('khong thay nhan "Model Number"');
-  const models = lbModel.map(lb => giaTriTrongBang(items, lb)).filter(Boolean);
-  const modelDuyNhat = [...new Set(models)];
-  if (modelDuyNhat.length === 0) throw new Error('khong doc duoc Model Number');
-  if (modelDuyNhat.length > 1) {
-    throw new Error(`Model Number doc ra ${modelDuyNhat.length} gia tri khac nhau ` +
-                    `(${modelDuyNhat.join(', ')}) — hoac don nhieu SKU, hoac doc nham cot. ` +
-                    `Chua co mau that de phan biet, KHONG tu xu ly`);
-  }
-
-  const qtyStr = giaTriTrongBang(items, nhan(items, 'Qty Shipped'));
-  const qty = parseInt(qtyStr, 10);
-  if (!Number.isInteger(qty) || qty < 1) throw new Error(`Qty Shipped "${qtyStr}" khong hop le`);
-
-  // Item Description — cột H của sheet lấy chuỗi NÀY (mô tả trên slip),
-  // KHÔNG phải mô tả trong pallet.csv. Hai chuỗi khác nhau; lấy nhầm là sheet
-  // ghi tên hàng không khớp giấy tờ gửi khách.
-  // Nhãn xuất hiện 2 lần (phần trả hàng + phần slip) -> lấy bản DÀI hơn, vì
-  // bản trong phần trả hàng thường bị cắt ngắn.
-  const moTaHang = items.filter(i => i.s === 'Item Description')
-    .map(lb => nhieuManhTrongBang(items, lb))
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length)[0] || null;
-  if (!moTaHang) throw new Error('khong doc duoc Item Description');
+  // ---- mặt hàng: đọc TẤT CẢ dòng, xem `docDongHang()` --------------------
+  const items = docDongHang(items0);
+  if (!items.length) throw new Error('khong doc duoc dong hang nao');
 
   return {
     po, customerOrder, ngay, shipVia, loai, addressType, orderedBy,
     shipTo: { ten, co, laStore, diaChi, city, bang, zip, phone },
-    items: [{ model: modelDuyNhat[0], qty, moTa: moTaHang }]
+    items
   };
 }
 
