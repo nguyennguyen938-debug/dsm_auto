@@ -43,12 +43,13 @@ Rồi bảo Claude đọc theo thứ tự: `CLAUDE.md` → file này → `00_Ban
 | `aact/` | đã tạo BOL trên AACT | BOL thứ hai trong hệ thống họ |
 | `drive/` | đã tạo folder Drive cho PO nào | folder trùng, ghi đè cột P |
 | `qty/` | số lượng thật DSM ghi nhận | mất đối chiếu, BOL có thể sai cân |
+| `invoice/` | đã gửi hoá đơn cho lô nào | **gửi hoá đơn lần hai** cho Home Depot |
 | `phanloai/` | kết quả tra tồn (cầu nối hai luồng) | đơn kẹt giữa hai luồng |
 | `storageState.json` | phiên DSM | phải đăng nhập lại |
 | `.profile-ground/` | phiên Lecangs + UPS | phải đăng nhập lại qua VNC |
 | `creds.json`, `ups-api.txt` | tài khoản, khoá API UPS | phải xin lại |
 
-Sáu thư mục bằng chứng đầu chỉ khoảng **1.5 MB** — nhỏ, nhưng là thứ duy nhất ngăn hệ
+Bảy thư mục bằng chứng đầu chỉ khoảng **1.5 MB** — nhỏ, nhưng là thứ duy nhất ngăn hệ
 thống làm lại những việc không hoàn tác được.
 
 **Sao lưu:**
@@ -132,7 +133,8 @@ nhưng đường đó không dùng trong cron.
 
 ```bash
 tar xzf ~/dsm-sao-luu-<ngày>.tar.gz -C .
-ls 11_TaiVe/          # phai thay: ups lecangs drive aact qty phanloai storageState.json creds.json ups-api.txt
+ls 11_TaiVe/    # phai thay: ups lecangs drive aact qty phanloai invoice
+                #             storageState.json{,.info.json} creds.json ups-api.txt
 mkdir -p 11_TaiVe/{packingslip,bol,logs,dsm_raw}
 ```
 

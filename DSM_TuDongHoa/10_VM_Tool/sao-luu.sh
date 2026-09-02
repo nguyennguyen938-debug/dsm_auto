@@ -23,7 +23,11 @@ RA="11_TaiVe/$TEN"
 # Bang chung chong trung + phien + khoa. KHONG kem: packingslip, bol, logs,
 # .profile-ground (96M) — tai lai duoc hoac qua nang.
 CO=()
-for m in ups lecangs drive aact qty phanloai storageState.json creds.json ups-api.txt; do
+# 🔴 `invoice` THIEU trong ban dau (phat hien 26/08) — do la bang chung DA GUI HOA DON,
+#    mot trong nam viec khong hoan tac duoc. Mat no = gui hoa don lan hai cho Home Depot.
+# `storageState.json.info.json` giu moc dang nhap, `giu-session.mjs` doc de tinh tuoi phien.
+for m in ups lecangs drive aact qty phanloai invoice \
+         storageState.json storageState.json.info.json creds.json ups-api.txt; do
   [ -e "11_TaiVe/$m" ] && CO+=("11_TaiVe/$m")
 done
 [ -f 10_VM_Tool/crontab.txt ] || crontab -l > 10_VM_Tool/crontab.txt 2>/dev/null
