@@ -52,13 +52,16 @@ Rồi bảo Claude đọc theo thứ tự: `CLAUDE.md` → file này → `00_Ban
 Bảy thư mục bằng chứng đầu chỉ khoảng **1.5 MB** — nhỏ, nhưng là thứ duy nhất ngăn hệ
 thống làm lại những việc không hoàn tác được.
 
-**Sao lưu:**
+**Sao lưu — hai mức:**
 
 ```bash
-bash 10_VM_Tool/sao-luu.sh
+bash 10_VM_Tool/sao-luu.sh              # GON  (~2 MB)  — chay hang ngay
+bash 10_VM_Tool/sao-luu.sh --day-du     # DAY DU (~18 MB) — truoc khi bo VM
 ```
 
-Tạo `11_TaiVe/dsm-sao-luu-<ngày>.tar.gz` (~1 MB). Đưa lên **Drive folder
+**Gọn** = bằng chứng + phiên + khoá + crontab. Đủ để máy mới không làm lại việc tốn tiền.
+**Đầy đủ** = thêm profile Chrome (chỉ phần trạng thái ~350 KB, bỏ 96 MB cache), packing
+slip, BOL, log, ảnh. Đủ để máy mới **giống hệt** máy cũ. Đưa lên **Drive folder
 `1mVndvxy60i1pbASMKeS2VuHizou3XCqo`** — đó là bản cứu hộ khi VM mất.
 
 ⛔ **Đừng đẩy lên GitHub** (repo PUBLIC). Và kiểm folder Drive đang ở chế độ hạn chế,
@@ -129,14 +132,20 @@ cd ..
 Apps Script chuyển thành PDF. `fill_bol.py` có đường xuất PDF thẳng cần WeasyPrint,
 nhưng đường đó không dùng trong cron.
 
-### 4.5. Trả lại bằng chứng và phiên
+### 4.5. Trả lại bằng chứng và phiên — MỘT LỆNH
 
 ```bash
-tar xzf ~/dsm-sao-luu-<ngày>.tar.gz -C .
-ls 11_TaiVe/    # phai thay: ups lecangs drive aact qty phanloai invoice
-                #             storageState.json{,.info.json} creds.json ups-api.txt
-mkdir -p 11_TaiVe/{packingslip,bol,logs,dsm_raw}
+bash 10_VM_Tool/khoi-phuc.sh ~/dsm-sao-luu-daydu-<ngày>.tar.gz
 ```
+
+Script tự làm: giải nén → kiểm đủ 7 nhóm bằng chứng → kiểm phiên và khoá → dựng lại
+profile Chrome → tạo thư mục làm việc → chạy bộ test → báo phiên DSM còn sống không.
+
+Kết thúc phải thấy **`0 muc loi`**. Nó **không** tự đặt cron (bước 4.6) vì file crontab
+có thể chứa dòng của dự án khác — bạn xem rồi tự đặt.
+
+Đã kiểm thật 02/09/2026: giải nén vào thư mục trắng, chạy ra `18 muc tot, 0 muc loi`,
+bộ test 97 pass, phiên DSM còn sống.
 
 ### 4.6. Đặt lại lịch chạy
 

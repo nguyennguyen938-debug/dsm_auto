@@ -1,12 +1,3 @@
-# crontab cua VM wayfair-auto-01 — xuat 2026-08-26 16:03 gio VN
-#
-# 🔴 KHONG nam trong git neu khong xuat tay — mat file nay la mat toan bo lich chay.
-# Dung lai tren may moi:   crontab - < 10_VM_Tool/crontab.txt
-# (dung 'crontab <file>' — duong dan bi cat o 100 ky tu)
-#
-# Dong dau la cua DU AN KHAC (/opt/wayfair) — GIU NGUYEN, dung xoa.
-# Nhanh Ground (chay-ground.sh) CO Y chua co trong day: bat la mua nhan UPS that.
-
 # Wayfair AR/AP + Dropship -> Drive -> Sheet.
 # Hàng ngày 08:35 ICT. Phút :35 để tránh các task chạy phút :00.
 # Chạy hàng ngày (không phải hàng tuần) để session Wayfair chết thì biết trong
