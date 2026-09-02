@@ -3,8 +3,10 @@
 Claude Code đọc file này tự động. Đây là bản tóm tắt **đã kiểm chứng thực tế**; chi tiết trong các file
 được dẫn ở dưới. Cập nhật **08/08/2026**.
 
-> 📌 **Phiên mới đọc thêm `00_BanGiao_PhienMoi_08082026.md`** — trạng thái từng phần, 4 đơn
-> Ground đang chờ, 10 bẫy đã gặp, và những gì **không nên thử lại**.
+> 📌 **Phiên mới đọc thêm `00_KHOI_DONG_PHIEN_MOI.md`** — dự án lưu ở đâu, phiên nào tự
+> sống, việc còn treo. Rồi `00_BanGiao_PhienMoi_08082026.md` cho bẫy đã gặp.
+>
+> 🖥️ **Dựng lại trên VM mới: `00_TAI_LAP_VM_MOI.md`** — 11 bước, 4 chỗ phải dừng hỏi.
 
 ---
 

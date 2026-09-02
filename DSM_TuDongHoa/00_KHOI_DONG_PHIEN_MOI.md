@@ -74,6 +74,9 @@ nhãn UPS và đơn Lecangs.
 
 ## 4. Dựng lại trên máy mới — từng bước
 
+> 🖥️ Nếu người làm là **AI agent trên máy trắng**, dùng `00_TAI_LAP_VM_MOI.md` thay cho
+> mục này — cùng nội dung nhưng có điểm kiểm chứng sau mỗi bước và 4 chỗ phải dừng hỏi.
+
 Đã kiểm trên **Debian 13** · Node **24** · npm **11** · Python **3.13**.
 Máy tối thiểu: 2 nhân, 4 GB RAM, 30 GB đĩa (VM hiện tại là `e2-medium`).
 
