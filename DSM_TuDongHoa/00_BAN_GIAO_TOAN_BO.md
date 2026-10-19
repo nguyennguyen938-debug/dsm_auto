@@ -88,7 +88,7 @@ Push từ VM bằng khoá SSH `~/.ssh/id_ed25519` (remote đã là `git@github.c
 
 | Site | Tài khoản | Ghi chú |
 |---|---|---|
-| DSM | (phiên cookie) | `giu-session.sh` giữ sống, đã sống > 600 giờ liền |
+| DSM | (phiên cookie, SSO Frontegg) | `giu-session.sh` giữ sống được ~65 ngày (1561 giờ), rồi vẫn chết 10/10. Đăng nhập lại bắt buộc có người |
 | UPS | shipper **`1741XG`** ALL FOR WOOD · trả cước **third party `12C8D2`** (Home Depot), ZIP `92571` | khoá API trong `11_TaiVe/ups-api.txt` |
 | Lecangs | người dùng đăng nhập tay qua VNC (lần cuối 15/08) | **không lưu mật khẩu**. Tài khoản cũ `sue.nguyen@` từng bị khoá sau 6 lần sai |
 | AACT | `info@allforwood.com` | `creds.json` |
@@ -281,7 +281,10 @@ nằm **trên Drive**, không phải VM.
 
 | Phiên | Tự sống? | Khi chết |
 |---|---|---|
-| DSM | ✅ cron chạm nhẹ 5' | `node 10_VM_Tool/login.mjs`, người dùng tự gõ |
+| DSM | ✅ cron chạm nhẹ 5' — kéo dài được ~65 ngày, **không vô hạn** | `node 10_VM_Tool/login.mjs`, người dùng tự gõ |
+
+🔴 **Phiên chết thì không có cảnh báo nào.** Cron vẫn chạy, log `giu-session.log` ghi `CHET`, nhưng
+không ai đọc. Lần 10/10 mất 9 ngày mới phát hiện. Kiểm nhanh: `tail -1 11_TaiVe/logs/giu-session.log`.
 | UPS API | ✅ token 4 giờ, tool tự xin lại | — |
 | **Lecangs** | ❌ **không gì giữ**, sống ~10 ngày | `vnc.sh bat` → người dùng đăng nhập tay → đóng Chrome bằng **SIGTERM theo PID** |
 
@@ -315,8 +318,8 @@ nên tạo thừa chỉ để lại số rác.
 
 | | |
 |---|---|
-| Cron chính | ✅ chạy đều, không lỗi. Slip mới nhất **10/10**, tổng 92 slip |
-| Phiên DSM | ✅ sống |
+| Cron chính | ⚠️ vẫn chạy nhưng **không tải được gì** — xem dòng dưới. Slip mới nhất **10/10**, tổng 92 slip |
+| Phiên DSM | ❌ **CHẾT từ 10/10/2026 11:17** sau 1561 giờ sống liền. 9 ngày không tải đơn mới. Cần người dùng đăng nhập lại (`login.mjs` qua VNC) |
 | Phiên Lecangs | ❌ **chết** |
 | Nhánh Ground | ❌ chưa vào cron |
 | Đơn Ground chờ nhãn | **~50** (58 đơn `C = UPS` chưa ai nhận ở cột D, chỉ 7 có bằng chứng nhãn) |
