@@ -3,6 +3,9 @@
 Claude Code đọc file này tự động. Đây là bản tóm tắt **đã kiểm chứng thực tế**; chi tiết trong các file
 được dẫn ở dưới. Cập nhật **08/08/2026**.
 
+> 🧭 **AGENT MỚI: đọc `00_BAN_GIAO_TOAN_BO.md` TRƯỚC TIÊN** — toàn cảnh dự án, mọi tool, vị trí,
+> luật, trạng thái và việc còn treo (cập nhật 19/10/2026).
+>
 > 📌 **Phiên mới đọc thêm `00_KHOI_DONG_PHIEN_MOI.md`** — dự án lưu ở đâu, phiên nào tự
 > sống, việc còn treo. Rồi `00_BanGiao_PhienMoi_08082026.md` cho bẫy đã gặp.
 >
